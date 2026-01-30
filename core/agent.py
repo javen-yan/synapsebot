@@ -112,8 +112,94 @@ class Agent:
             else:
                 # Top level response (Final Answer)
                 content = message.content
-                # Top level response (Final Answer)
-                content = message.content
                 logger.print(f"\n[bold green]Agent:[/bold green]")
                 logger.print(Markdown(content))
                 return content
+
+    async def run_stream(self, user_input: str):
+        """Runs the agent with streaming output for SSE."""
+        self.messages.append({"role": "user", "content": user_input})
+        
+        while True:
+            tools_schema = self.registry.to_openai_tools()
+            
+            try:
+                response = await self.llm.chat(self.messages, tools=tools_schema)
+                message = response.choices[0].message
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                return
+
+            self.messages.append(message)
+
+            # If tool calls, execute them silently (no streaming)
+            if message.tool_calls:
+                for tool_call in message.tool_calls:
+                    function_name = tool_call.function.name
+                    arguments_str = tool_call.function.arguments
+                    call_id = tool_call.id
+                    
+                    try:
+                        arguments = json.loads(arguments_str)
+                        tool = self.registry.get_tool(function_name)
+                        
+                        if tool:
+                            # Execute Tool
+                            if asyncio.iscoroutinefunction(tool.handler):
+                                result = await tool.handler(arguments)
+                            else:
+                                result = tool.handler(arguments)
+                            
+                            # Parse result
+                            if isinstance(result, (list, tuple)):
+                                final_text = []
+                                for item in result:
+                                    if isinstance(item, TextContent):
+                                        final_text.append(item.text)
+                                    elif isinstance(item, ImageContent):
+                                        final_text.append(f"[Image content: {item.mimeType}]")
+                                    elif isinstance(item, EmbeddedResource):
+                                        final_text.append(f"[Embedded resource: {item.resource.uri}]")
+                                    else:
+                                        final_text.append(str(item))
+                                output = "\n".join(final_text)
+                            elif hasattr(result, 'content') and isinstance(result.content, list):
+                                final_text = []
+                                for item in result.content:
+                                    if isinstance(item, TextContent):
+                                        final_text.append(item.text)
+                                    elif isinstance(item, ImageContent):
+                                        final_text.append(f"[Image content: {item.mimeType}]")
+                                    else:
+                                        final_text.append(str(item))
+                                output = "\n".join(final_text)
+                            else:
+                                output = str(result)
+                        else:
+                            output = f"Error: Tool {function_name} not found."
+                        
+                        self.messages.append({
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "content": output
+                        })
+                    except Exception as e:
+                        error_msg = f"Error calling {function_name}: {str(e)}"
+                        self.messages.append({
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "content": error_msg
+                        })
+            else:
+                # Stream only the final response
+                content = message.content or ""
+                # Stream by lines to preserve markdown formatting
+                lines = content.split('\n')
+                for i, line in enumerate(lines):
+                    # Add newline except for last line
+                    chunk = line + ('\n' if i < len(lines) - 1 else '')
+                    yield f"data: {json.dumps({'type': 'content', 'chunk': chunk})}\n\n"
+                    await asyncio.sleep(0.05)
+                
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                return

@@ -2,19 +2,14 @@ import logging
 import os
 import asyncio
 from typing import List, Optional
-
 from rich.console import Console
-
 from core.logger import logger
-
 from core.config import load_config
 from core.skills import load_skills, format_skills_for_prompt
 from core.tools import ToolRegistry
 from core.mcp_client import MCPManager
 from core.llm import LLMClient
 from core.agent import Agent
-
-
 
 class AgentLite:
     def __init__(self):
@@ -23,6 +18,7 @@ class AgentLite:
         self.mcp_manager = MCPManager()
         self.llm_client = None
         self.agent: Optional[Agent] = None
+        self.skills = []
         
     async def initialize(self):
         """Initializes the AgentLite application, loading config, tools, and creating the agent."""
@@ -59,11 +55,10 @@ class AgentLite:
         
         # 3. Load Local Skills
         skills_paths = [self.config.storage.system_skills_path, self.config.storage.user_skills_path]
-        skills = load_skills(skills_paths)
-        logger.print(f"[green]Local Skills loaded[/green]: {len(skills)}")
+        self.skills = load_skills(skills_paths)
+        logger.print(f"[green]Local Skills loaded[/green]: {len(self.skills)}")
         
         # 4. List All Available Tools
-        tools = self.registry.list_tools()
         tools = self.registry.list_tools()
         logger.print(f"[green]Total Tools Registered[/green]: {len(tools)}")
         for t in tools:
@@ -76,9 +71,11 @@ class AgentLite:
         system_ctx = f"You are AgentLite, a helpful AI assistant with access to the following tools.\n"
         system_ctx += f"Your current working directory is: {cwd}\n"
         system_ctx += "When using file or git tools, assume this directory unless specified otherwise.\n\n"
-        # In future: system_ctx += format_skills_for_prompt(skills)
         
-        self.llm_client = LLMClient(self.config.llm)
+        # Add skills to system context
+        from core.skills import format_skills_for_prompt
+        system_ctx += format_skills_for_prompt(self.skills) + "\n\n"
+        
         self.llm_client = LLMClient(self.config.llm)
         self.agent = Agent(self.llm_client, self.registry, system_ctx)
 
@@ -88,3 +85,10 @@ class AgentLite:
             raise RuntimeError("Agent not initialized. Call initialize() first.")
         
         await self.agent.run(user_input)
+
+    async def reload_skills(self):
+        """Reloads skills from disk."""
+        skills_paths = [self.config.storage.system_skills_path, self.config.storage.user_skills_path]
+        self.skills = load_skills(skills_paths)
+        logger.info(f"Skills reloaded: {len(self.skills)}")
+

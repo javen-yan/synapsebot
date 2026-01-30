@@ -7,6 +7,10 @@
     "bash": {
       "command": "python",
       "args": ["-u", "./mcp_server_bash.py"]
+    },
+    "git": {
+      "command": "python",
+      "args": ["-u", "-m", "mcp_server_git", "--repository", "."]
     }
   }
 }

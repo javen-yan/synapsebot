@@ -1,5 +1,6 @@
 import os
 import yaml
+import shutil
 from pathlib import Path
 from typing import List, Dict, Optional
 from pydantic import BaseModel
@@ -74,3 +75,56 @@ def format_skills_for_prompt(skills: List[Skill]) -> str:
         
     prompt += "\nTo use a skill, you can read its `SKILL.md` file for full instructions or execute its scripts."
     return prompt
+
+def delete_skill(skill_path: str, name: str) -> bool:
+    """
+    Deletes a skill directory.
+    """
+    base_path = Path(skill_path)
+    skill_dir = base_path / name
+    
+    if skill_dir.exists() and skill_dir.is_dir():
+        shutil.rmtree(skill_dir)
+        return True
+    return False
+
+def upload_skill_zip(skill_path: str, zip_file_path: str) -> str:
+    """
+    Extracts a ZIP file containing a skill to the specified path.
+    The ZIP should contain a single directory with SKILL.md inside.
+    Returns the skill name.
+    """
+    import zipfile
+    
+    base_path = Path(skill_path)
+    if not base_path.exists():
+        base_path.mkdir(parents=True)
+    
+    # Extract to temporary location first
+    with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+        # Get the root directory name from the ZIP
+        namelist = zip_ref.namelist()
+        if not namelist:
+            raise ValueError("ZIP file is empty")
+        
+        # Find the root directory
+        root_dirs = set()
+        for name in namelist:
+            parts = Path(name).parts
+            if parts:
+                root_dirs.add(parts[0])
+        
+        if len(root_dirs) != 1:
+            raise ValueError("ZIP must contain exactly one root directory")
+        
+        skill_name = list(root_dirs)[0]
+        
+        # Check if SKILL.md exists in the ZIP
+        skill_md_path = f"{skill_name}/SKILL.md"
+        if skill_md_path not in namelist:
+            raise ValueError(f"ZIP must contain {skill_name}/SKILL.md")
+        
+        # Extract all files
+        zip_ref.extractall(base_path)
+    
+    return skill_name

@@ -28,5 +28,12 @@ inspect_tools.py
 .vscode/
 .idea/
 
+data/user
 
 node_modules
+
+# Next.js
+web/.next/
+web/out/
+web/node_modules/
+web/.env*.local

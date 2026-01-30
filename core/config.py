@@ -48,7 +48,7 @@ class StorageConfig(BaseModel):
 class Config(BaseModel):
     llm: LLMConfig
     storage: StorageConfig
-    log_level: str = "INFO"
+    log_level: str = "WARNING"
 
 def load_config(config_path: str = "config.yaml") -> Config:
     if not os.path.exists(config_path):
