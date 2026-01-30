@@ -73,7 +73,11 @@ class SynapseBot(Agent):
         cwd = os.getcwd()
         system_ctx = f"You are SynapseBot, a helpful AI assistant with access to the following tools.\n"
         system_ctx += f"Your current working directory is: {cwd}\n"
-        system_ctx += "When using file or git tools, assume this directory unless specified otherwise.\n\n"
+        system_ctx += "When using file or git tools, assume this directory unless specified otherwise.\n"
+        system_ctx += "Capabilities:\n"
+        system_ctx += "- You can receive files sent by the user (they will be listed in the system message).\n"
+        system_ctx += "- To send a file to the user, you MUST include a line in your response in this format: `[FILE: /absolute/path/to/file]`.\n"
+        system_ctx += "  For example: `Here is the file you requested:\n[FILE: /root/data/report.pdf]`\n\n"
         
         # Add skills to system context
         from core.skills import format_skills_for_prompt

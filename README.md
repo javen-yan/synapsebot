@@ -111,7 +111,7 @@ synapse-bot/
 │   └── lib/
 │       └── api.ts          # API client with SSE support
 ├── api.py                  # FastAPI backend
-├── main.py                 # CLI entry point
+├── cli.py                 # CLI entry point
 └── config.yaml             # Configuration file
 ```
 
@@ -179,7 +179,7 @@ Visit [https://agentskills.io](https://agentskills.io) to browse available MCP s
 ### CLI
 
 ```bash
-poetry run python main.py
+poetry run python cli.py
 ```
 
 ### API
@@ -196,28 +196,85 @@ curl -N http://localhost:8000/chat/stream \
   -d '{"message": "Hello!"}'
 ```
 
-## 🛠️ Creating Skills
+## 🔌 Slack Integration
 
-Skills are located in `data/user/skills/`. Each skill is a directory with:
+SynapseBot supports real-time interaction via Slack using Socket Mode, allowing for direct messages, channel mentions, and file sharing.
 
+### Setup Guide
+
+1. **Create a Slack App**
+   - Go to [Slack API: Applications](https://api.slack.com/apps).
+   - Click "Create New App" and choose "From an app manifest".
+   - Select your workspace.
+
+2. **Configure Manifest**
+   - Copy the contents of `core/channels/slack/manifest.yaml` from this repository.
+   - Paste it into the YAML editor in Slack.
+   - Verify the permissions and settings (Socket Mode enabled, Event Subscriptions, etc.).
+   - Click "Create".
+
+3. **Install & Tokens**
+   - **Install to Workspace**: Go to "Basic Information" and install the app.
+   - **Bot Token**: Go to "OAuth & Permissions" and copy the `Bot User OAuth Token` (starts with `xoxb-`).
+   - **App Token**: Go to "Basic Information" > "App-Level Tokens", create one with `connections:write` scope, and copy it (starts with `xapp-`).
+
+### Configuration
+
+Add the tokens to your `config.yaml` or use environment variables:
+
+```yaml
+channels:
+  slack:
+    enabled: true
+    bot_token: "xoxb-your-token" # OR set env var SLACK_BOT_TOKEN
+    app_token: "xapp-your-token" # OR set env var SLACK_APP_TOKEN
 ```
-my-skill/
-├── SKILL.md          # Skill documentation (required)
-├── scripts/          # Executable scripts
-└── resources/        # Additional resources
+
+### Usage Features
+
+- **Direct Chat**: DM the bot (`@SynapseBot` by default) for private assistance.
+- **Channel Support**: Invite the bot to any channel (`/invite @SynapseBot`) and mention it to trigger a response.
+- **File Handling**:
+  - **Upload to Bot**: Drag and drop files in the chat. The bot automatically downloads and can process them.
+  - **Download from Bot**: The bot can generate files and send them back to you as valid Slack attachments.
+
+## 🔌 Feishu Integration
+
+SynapseBot supports real-time interaction via Feishu (Lark) using WebSocket.
+
+### Setup Guide
+
+1. **Create a Feishu App**
+   - Go to [Feishu Open Platform](https://open.feishu.cn/app).
+   - Click "Create App" and select "Custom App".
+   - Enter your app name and description.
+
+2. **Enable Bot Features**
+   - Go to "Add Features" > "Bot" and click "Add".
+   - Go to "Permissions & Scopes" and add the following permissions:
+     - `im:message` (Receive messages)
+     - `im:message:send_as_bot` (Send messages)
+     - `im:resource` (Upload/Download files)
+
+3. **Get Credentials**
+   - Go to "Credentials & Basic Info" and copy `App ID` and `App Secret`.
+
+### Configuration
+
+Add the credentials to your `config.yaml` or use environment variables:
+
+```yaml
+channels:
+  feishu:
+    enabled: true
+    app_id: "cli_..." # OR set env var FEISHU_APP_ID
+    app_secret: "..." # OR set env var FEISHU_APP_SECRET
 ```
-
-**SKILL.md format:**
-
-```markdown
----
-name: my-skill
-description: A brief description
----
 
 # Skill Documentation
 
 Detailed instructions on how to use this skill...
+
 ```
 
 ## 🎨 Frontend Features
@@ -235,3 +292,4 @@ MIT
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+```

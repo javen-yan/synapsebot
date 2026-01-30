@@ -11,6 +11,7 @@ export const api = axios.create({
 
 export interface ChatRequest {
   message: string;
+  files?: string[];
 }
 
 export interface ChatResponse {
@@ -31,12 +32,14 @@ export interface Tool {
 }
 
 export const chatApi = {
-  sendMessage: async (message: string): Promise<ChatResponse> => {
-    const response = await api.post<ChatResponse>('/chat', { message });
+  API_BASE_URL,
+  sendMessage: async (message: string, files: string[] = []): Promise<ChatResponse> => {
+    const response = await api.post<ChatResponse>('/chat', { message, files });
     return response.data;
   },
   sendMessageStream: async (
     message: string,
+    files: string[] = [],
     onChunk: (chunk: string) => void,
     onError: (error: string) => void,
     onDone: () => void
@@ -46,7 +49,7 @@ export const chatApi = {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, files }),
     });
 
     if (!response.ok) {
@@ -92,6 +95,16 @@ export const chatApi = {
     } finally {
       reader.releaseLock();
     }
+  },
+  uploadFile: async (file: File): Promise<{ filename: string; path: string; url: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
   },
 };
 

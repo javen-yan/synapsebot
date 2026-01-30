@@ -27,10 +27,14 @@ class StorageConfig(BaseModel):
     def user_mcp_config_path(self) -> str:
         return os.path.join(self.data_path, "user", "mcp_config.json")
 
+    @property
+    def upload_dir(self) -> str:
+        return os.path.join(self.data_path, "uploads")
+
     def ensure_structure(self):
         """Ensure all required directories and files exist."""
         # Create directories
-        for path in [self.system_skills_path, self.user_skills_path]:
+        for path in [self.system_skills_path, self.user_skills_path, self.upload_dir]:
             os.makedirs(path, exist_ok=True)
             
         # Create MCP config files if they don't exist
@@ -45,10 +49,26 @@ class StorageConfig(BaseModel):
                     f.write(default_mcp_config)
     
 
+
+class SlackConfig(BaseModel):
+    enabled: bool = False
+    bot_token: str = Field(default="")
+    app_token: str = Field(default="")
+
+class FeishuConfig(BaseModel):
+    enabled: bool = False
+    app_id: str = Field(default="")
+    app_secret: str = Field(default="")
+
+class ChannelsConfig(BaseModel):
+    slack: SlackConfig = Field(default_factory=SlackConfig)
+    feishu: FeishuConfig = Field(default_factory=FeishuConfig)
+
 class Config(BaseModel):
     llm: LLMConfig
     storage: StorageConfig
-    log_level: str = "WARNING"
+    channels: ChannelsConfig = Field(default_factory=ChannelsConfig)
+    log_level: str = "INFO"
 
 def load_config(config_path: str = "config.yaml") -> Config:
     if not os.path.exists(config_path):
@@ -62,8 +82,25 @@ def load_config(config_path: str = "config.yaml") -> Config:
     if api_key.startswith("${") and api_key.endswith("}"):
         env_var = api_key[2:-1]
         raw_config["llm"]["api_key"] = os.getenv(env_var, "")
+
+    # Expand Slack env vars
+    slack_cfg = raw_config.get("channels", {}).get("slack", {})
+    for field in ["bot_token", "app_token"]:
+        val = slack_cfg.get(field, "")
+        if val.startswith("${") and val.endswith("}"):
+            env_var = val[2:-1]
+            raw_config.setdefault("channels", {}).setdefault("slack", {})[field] = os.getenv(env_var, "")
+
+    # Expand Feishu env vars
+    feishu_cfg = raw_config.get("channels", {}).get("feishu", {})
+    for field in ["app_id", "app_secret"]:
+        val = feishu_cfg.get(field, "")
+        if val.startswith("${") and val.endswith("}"):
+            env_var = val[2:-1]
+            raw_config.setdefault("channels", {}).setdefault("feishu", {})[field] = os.getenv(env_var, "")
         
     config = Config(**raw_config)
+    
     config.storage.ensure_structure()
     
     return config

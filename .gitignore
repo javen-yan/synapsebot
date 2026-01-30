@@ -29,6 +29,8 @@ inspect_tools.py
 .idea/
 
 data/user
+data/downloads
+data/uploads
 
 node_modules
 

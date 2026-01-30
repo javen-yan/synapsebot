@@ -1,9 +1,13 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
+import shutil
+import uuid
 import json
-from typing import Dict, Any
+import asyncio
+from typing import Dict, Any, List, Optional
 
 from core.synapse_bot import SynapseBot
 from core.logger import logger
@@ -11,6 +15,8 @@ from core.skills import delete_skill, upload_skill_zip
 from core.config import load_config
 
 app = FastAPI(title="SynapseBot API", version="0.1.0")
+
+config = load_config()
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,6 +31,8 @@ agent_app = SynapseBot()
 
 class ChatRequest(BaseModel):
     message: str
+    files: List[str] = [] # List of file paths returned by /upload
+
 
 class ChatResponse(BaseModel):
     response: str
@@ -43,6 +51,20 @@ class SkillResponse(BaseModel):
 async def startup_event():
     logger.info("Starting SynapseBot API...")
     await agent_app.initialize()
+    
+    # Initialize Slack Bot if enabled
+    if agent_app.config.channels.slack.enabled:
+        from core.channels.slack import SlackBot
+        slack_bot = SlackBot(agent_app.config, agent_app.registry)
+        # Start in background
+        asyncio.create_task(slack_bot.start())
+
+    # Initialize Feishu Bot if enabled
+    if agent_app.config.channels.feishu.enabled:
+        from core.channels.feishu import FeishuBot
+        feishu_bot = FeishuBot(agent_app.config, agent_app.registry)
+        # Start in background
+        asyncio.create_task(feishu_bot.start())
 
 @app.get("/health")
 async def health_check():
@@ -54,7 +76,13 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=503, detail="Agent not initialized")
     
     try:
-        response_content = await agent_app.agent.run(request.message)
+        # Prepare message with attachments
+        full_message = request.message
+        if request.files:
+            file_note = "\n[System: User attached files:]\n" + "\n".join([f"- {path}" for path in request.files])
+            full_message += file_note
+
+        response_content = await agent_app.agent.run(full_message)
         return ChatResponse(response=response_content)
     except Exception as e:
         logger.error(f"Error processing chat: {e}")
@@ -70,7 +98,13 @@ async def chat_stream(request: ChatRequest):
     
     async def event_generator():
         try:
-            async for chunk in agent_app.agent.run_stream(request.message):
+            # Prepare message with attachments
+            full_message = request.message
+            if request.files:
+                file_note = "\n[System: User attached files:]\n" + "\n".join([f"- {path}" for path in request.files])
+                full_message += file_note
+
+            async for chunk in agent_app.agent.run_stream(full_message):
                 yield chunk
         except Exception as e:
             logger.error(f"Error in stream: {e}")
@@ -91,8 +125,6 @@ async def list_skills():
 
 @app.post("/skills/upload")
 async def upload_skill(file: UploadFile = File(...)):
-    # Determine user skills path from config
-    config = load_config()
     user_skills_path = config.storage.user_skills_path
     
     # Validate file type
@@ -125,7 +157,6 @@ async def upload_skill(file: UploadFile = File(...)):
 
 @app.delete("/skills/{name}")
 async def delete_skill_endpoint(name: str):
-    config = load_config()
     user_skills_path = config.storage.user_skills_path
     
     deleted = delete_skill(user_skills_path, name)
@@ -150,7 +181,6 @@ async def list_mcp_tools():
 
 @app.get("/config/mcp")
 async def get_mcp_config():
-    config = load_config()
     path = config.storage.user_mcp_config_path
     if os.path.exists(path):
         with open(path, "r") as f:
@@ -162,7 +192,6 @@ async def get_mcp_config():
 
 @app.post("/config/mcp")
 async def update_mcp_config(request: Dict[str, Any]):
-    config = load_config()
     path = config.storage.user_mcp_config_path
     
     # Validate structure strictly?
@@ -175,6 +204,45 @@ async def update_mcp_config(request: Dict[str, Any]):
         return {"status": "updated"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """Upload a general file for the agent to use."""
+    # Generate unique filename to preserve extension but avoid collisions
+    ext = os.path.splitext(file.filename)[1]
+    unique_name = f"{uuid.uuid4()}{ext}"
+    file_path = os.path.join(config.storage.upload_dir, unique_name)
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # We return the absolute path so the agent can read it directly
+        abs_path = os.path.abspath(file_path)
+        return {"filename": file.filename, "path": abs_path, "url": f"/files/{unique_name}"}
+    except Exception as e:
+        logger.error(f"Error uploading file: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/files/{filename}")
+async def get_file(filename: str):
+    """Serve uploaded or generated files."""
+    search_dirs = [
+        config.storage.upload_dir,
+        config.storage.data_path
+    ]
+    
+    target_path = None
+    for directory in search_dirs:
+        possible_path = os.path.join(directory, filename)
+        if os.path.exists(possible_path) and os.path.isfile(possible_path):
+            target_path = possible_path
+            break
+            
+    if not target_path:
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    return FileResponse(target_path)
 
 @app.post("/mcp/reload")
 async def reload_mcp():

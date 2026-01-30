@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Loader2, Brain } from "lucide-react";
+import { Send, Loader2, Brain, Paperclip, X, FileText } from "lucide-react";
 import { chatApi } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -12,6 +12,7 @@ import { useTranslations } from "next-intl";
 interface Message {
   role: "user" | "assistant";
   content: string;
+  files?: string[];
 }
 
 export default function ChatPage() {
@@ -20,7 +21,9 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [thinking, setThinking] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -30,12 +33,43 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages, thinking]);
 
-  const handleSend = async () => {
-    if (!input.trim() || streaming) return;
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setSelectedFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+    }
+  };
 
-    const userMessage: Message = { role: "user", content: input };
+  const removeFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSend = async () => {
+    if ((!input.trim() && selectedFiles.length === 0) || streaming) return;
+
+    let uploadedFilePaths: string[] = [];
+
+    // 1. Upload files first
+    if (selectedFiles.length > 0) {
+      try {
+        const uploadPromises = selectedFiles.map((file) => chatApi.uploadFile(file));
+        const uploaded = await Promise.all(uploadPromises);
+        uploadedFilePaths = uploaded.map((u) => u.path);
+      } catch (error) {
+        console.error("Upload error:", error);
+        alert("Failed to upload files");
+        return;
+      }
+    }
+
+    const userMessage: Message = { 
+        role: "user", 
+        content: input,
+        files: selectedFiles.map(f => f.name) // Store filenames for display
+    };
+    
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
+    setSelectedFiles([]);
     setThinking(true);
 
     // Add empty assistant message that will be filled
@@ -44,6 +78,8 @@ export default function ChatPage() {
     try {
       await chatApi.sendMessageStream(
         input,
+        uploadedFilePaths,
+        // onChunk
         // onChunk
         (chunk: string) => {
           setThinking(false);
@@ -135,20 +171,55 @@ export default function ChatPage() {
                 }`}
               >
                 {message.role === "user" ? (
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  <div>
+                    {message.files && message.files.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                            {message.files.map((file, i) => (
+                                <div key={i} className="flex items-center gap-1 bg-white/20 rounded px-2 py-1 text-xs">
+                                    <Paperclip size={12} />
+                                    <span>{file}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <p className="whitespace-pre-wrap">{message.content}</p>
+                  </div>
                 ) : (
                   <div className="prose prose-invert prose-slate max-w-none prose-headings:text-white prose-p:text-slate-200 prose-strong:text-white prose-code:text-cyan-300">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       rehypePlugins={[rehypeHighlight]}
                       components={{
-                        code: ({
-                          node,
-                          inline,
-                          className,
-                          children,
-                          ...props
-                        }: any) => {
+                        // Custom renderer for detecting [FILE: /path]
+                        code: ({ node, inline, className, children, ...props }: any) => {
+                             const content = String(children);
+                             const fileMatch = content.match(/^\[FILE:\s*(.*?)\]$/);
+                             
+                             if (fileMatch) {
+                                 const path = fileMatch[1];
+                                 const filename = path.split('/').pop() || "download";
+                                 // Construct download URL - assuming API serves it at /files/filename
+                                 // Note: This relies on the API's simple file serving which checks basic dirs.
+                                 const downloadUrl = `${chatApi.API_BASE_URL || 'http://localhost:8000'}/files/${filename}`;
+                                 
+                                 return (
+                                     <a 
+                                        href={downloadUrl} 
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg p-3 my-2 no-underline group transition-colors"
+                                     >
+                                        <div className="bg-cyan-500/20 p-2 rounded-lg text-cyan-400 group-hover:text-cyan-300">
+                                            <FileText size={24} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-slate-200 group-hover:text-white">{filename}</p>
+                                            <p className="text-xs text-slate-400">Click to download</p>
+                                        </div>
+                                     </a>
+                                 );
+                             }
+
                           return inline ? (
                             <code
                               className="bg-slate-700 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-sm"
@@ -255,18 +326,54 @@ export default function ChatPage() {
       {/* Input */}
       <div className="border-t border-slate-700 p-6 bg-slate-900">
         <div className="max-w-4xl mx-auto flex gap-4">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={t('placeholder')}
-            className="flex-1 bg-slate-800 border border-slate-600 rounded-xl px-6 py-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-            disabled={streaming || thinking}
+          
+          {/* File Preview */}
+          {selectedFiles.length > 0 && (
+            <div className="absolute bottom-full left-0 mb-4 px-6 w-full">
+                <div className="flex gap-2 bg-slate-800 p-2 rounded-lg border border-slate-700 overflow-x-auto">
+                    {selectedFiles.map((file, i) => (
+                        <div key={i} className="flex items-center gap-2 bg-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 shrink-0">
+                            <span className="truncate max-w-[150px]">{file.name}</span>
+                            <button onClick={() => removeFile(i)} className="hover:text-red-400">
+                                <X size={14} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+          )}
+
+          <div className="relative flex-1">
+             <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder={t('placeholder')}
+                className="w-full bg-slate-800 border border-slate-600 rounded-xl pl-6 pr-4 py-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                disabled={streaming || thinking}
+            />
+          </div>
+          
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileSelect} 
+            className="hidden" 
+            multiple 
           />
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={streaming || thinking}
+            className="bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl p-4 text-slate-400 hover:text-white transition-colors"
+          >
+            <Paperclip size={20} />
+          </button>
+
           <button
             onClick={handleSend}
-            disabled={streaming || thinking || !input.trim()}
+            disabled={streaming || thinking || (!input.trim() && selectedFiles.length === 0)}
             className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl px-8 py-4 font-medium transition-all flex items-center gap-2 text-white"
           >
             {streaming || thinking ? (

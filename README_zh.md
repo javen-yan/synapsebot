@@ -111,7 +111,7 @@ synapse-bot/
 │   └── lib/
 │       └── api.ts          # API 客户端，支持 SSE
 ├── api.py                  # FastAPI 后端
-├── main.py                 # CLI 入口
+├── cli.py                 # CLI 入口
 └── config.yaml             # 配置文件
 ```
 
@@ -179,7 +179,7 @@ mcp_servers_config: "./data/system/mcp_config.json"
 ### 命令行
 
 ```bash
-poetry run python main.py
+poetry run python cli.py
 ```
 
 ### API
@@ -196,28 +196,85 @@ curl -N http://localhost:8000/chat/stream \
   -d '{"message": "你好！"}'
 ```
 
-## 🛠️ 创建技能
+## 🔌 Slack 集成
 
-技能位于 `data/user/skills/`。每个技能是一个目录，包含：
+SynapseBot 支持通过 Socket Mode 与 Slack 进行实时交互，支持私信、频道提及和文件共享。
 
+### 设置指南
+
+1. **创建 Slack 应用**
+   - 前往 [Slack API: Applications](https://api.slack.com/apps)。
+   - 点击 "Create New App" 并选择 "From an app manifest"。
+   - 选择你的工作区。
+
+2. **配置 Manifest**
+   - 复制本仓库中 `core/channels/slack/manifest.yaml` 的内容。
+   - 将其粘贴到 Slack 的 YAML 编辑器中。
+   - 确认权限和设置（已启用 Socket Mode，事件订阅等）。
+   - 点击 "Create"。
+
+3. **安装与令牌**
+   - **安装到工作区**：前往 "Basic Information" 并安装应用。
+   - **Bot Token**：前往 "OAuth & Permissions" 并复制 `Bot User OAuth Token`（以 `xoxb-` 开头）。
+   - **App Token**：前往 "Basic Information" > "App-Level Tokens"，创建一个具有 `connections:write` 权限的 token 并复制（以 `xapp-` 开头）。
+
+### 配置
+
+将令牌添加到您的 `config.yaml` 或使用环境变量：
+
+```yaml
+channels:
+  slack:
+    enabled: true
+    bot_token: "xoxb-your-token" # 或者设置环境变量 SLACK_BOT_TOKEN
+    app_token: "xapp-your-token" # 或者设置环境变量 SLACK_APP_TOKEN
 ```
-my-skill/
-├── SKILL.md          # 技能文档（必需）
-├── scripts/          # 可执行脚本
-└── resources/        # 其他资源
+
+### 使用功能
+
+- **直接聊天**：私信机器人（默认为 `@SynapseBot`）获取私人助手支持。
+- **频道支持**：将机器人邀请到任何频道（`/invite @SynapseBot`）并提及它以触发响应。
+- **文件处理**：
+  - **上传给机器人**：在聊天中拖放文件。机器人会自动下载并处理它们。
+  - **从机器人下载**：机器人可以生成文件并作为有效的 Slack 附件发送回给您。
+
+## 🔌 飞书集成
+
+SynapseBot 支持通过通过 WebSocket 与飞书进行实时交互。
+
+### 设置指南
+
+1. **创建飞书应用**
+   - 前往 [飞书开放平台](https://open.feishu.cn/app)。
+   - 点击"创建应用"并选择"企业自建应用"。
+   - 输入应用名称和描述。
+
+2. **启用机器人功能**
+   - 前往"添加应用能力" > "机器人"并点击"添加"。
+   - 前往"权限管理"并添加以下权限：
+     - `im:message` (接收消息)
+     - `im:message:send_as_bot` (发送消息)
+     - `im:resource` (上传/下载文件)
+
+3. **获取凭证**
+   - 前往"凭证与基础信息"并复制 `App ID` 和 `App Secret`。
+
+### 配置
+
+将凭证添加到您的 `config.yaml` 或使用环境变量：
+
+```yaml
+channels:
+  feishu:
+    enabled: true
+    app_id: "cli_..." # 或者设置环境变量 FEISHU_APP_ID
+    app_secret: "..." # 或者设置环境变量 FEISHU_APP_SECRET
 ```
-
-**SKILL.md 格式：**
-
-```markdown
----
-name: my-skill
-description: 简短描述
----
 
 # 技能文档
 
 关于如何使用此技能的详细说明...
+
 ```
 
 ## 🎨 前端特性
@@ -235,3 +292,4 @@ MIT
 ## 🤝 贡献
 
 欢迎贡献！请随时提交 Pull Request。
+```
