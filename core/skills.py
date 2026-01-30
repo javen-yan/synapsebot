@@ -88,43 +88,48 @@ def delete_skill(skill_path: str, name: str) -> bool:
         return True
     return False
 
-def upload_skill_zip(skill_path: str, zip_file_path: str) -> str:
+def upload_skill_zip(skill_path: str, zip_file_path: str) -> List[str]:
     """
-    Extracts a ZIP file containing a skill to the specified path.
-    The ZIP should contain a single directory with SKILL.md inside.
-    Returns the skill name.
+    Extracts a ZIP file containing one or more skills to the specified path.
+    Scans for directories containing SKILL.md and installs them.
+    Returns a list of installed skill names.
     """
     import zipfile
+    import tempfile
     
     base_path = Path(skill_path)
     if not base_path.exists():
         base_path.mkdir(parents=True)
     
-    # Extract to temporary location first
-    with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-        # Get the root directory name from the ZIP
-        namelist = zip_ref.namelist()
-        if not namelist:
-            raise ValueError("ZIP file is empty")
-        
-        # Find the root directory
-        root_dirs = set()
-        for name in namelist:
-            parts = Path(name).parts
-            if parts:
-                root_dirs.add(parts[0])
-        
-        if len(root_dirs) != 1:
-            raise ValueError("ZIP must contain exactly one root directory")
-        
-        skill_name = list(root_dirs)[0]
-        
-        # Check if SKILL.md exists in the ZIP
-        skill_md_path = f"{skill_name}/SKILL.md"
-        if skill_md_path not in namelist:
-            raise ValueError(f"ZIP must contain {skill_name}/SKILL.md")
-        
-        # Extract all files
-        zip_ref.extractall(base_path)
+    installed_skills = []
     
-    return skill_name
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+            
+        # Walk through the temp dir to find SKILL.md files
+        for root, dirs, files in os.walk(temp_dir):
+            if "SKILL.md" in files:
+                # This directory is a skill
+                source_dir = Path(root)
+                # Use the directory name as the skill name, or parent if it's top level?
+                # Usually skill name = directory name
+                skill_name = source_dir.name
+                
+                # Validation: Does SKILL.md have valid yaml?
+                # We could parse it here to get the 'real' name, but directory name is safer for filesystem
+                
+                target_dir = base_path / skill_name
+                
+                # If it already exists, overwrite? or merge?
+                # For now, remove existing and move new
+                if target_dir.exists():
+                    shutil.rmtree(target_dir)
+                
+                shutil.move(str(source_dir), str(target_dir))
+                installed_skills.append(skill_name)
+                
+    if not installed_skills:
+        raise ValueError("No valid skills (directories containing SKILL.md) found in ZIP")
+        
+    return installed_skills

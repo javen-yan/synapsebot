@@ -1,0 +1,61 @@
+{
+  "Layout": {
+    "title": "SynapseBot",
+    "subtitle": "AI 助手平台",
+    "nav": {
+      "chat": "聊天",
+      "skills": "技能",
+      "tools": "工具"
+    },
+    "version": "版本 {version}"
+  },
+  "Chat": {
+    "title": "与 Agent 对话",
+    "subtitle": "提问并获取智能回复",
+    "placeholder": "输入您的消息...",
+    "send": "发送",
+    "thinking": "思考中",
+    "emptyState": {
+      "title": "主要功能",
+      "subtitle": "询问有关可用工具或技能的信息"
+    },
+    "error": "抱歉，遇到错误。请重试。"
+  },
+  "Skills": {
+    "title": "技能管理",
+    "subtitle": "上传 ZIP 格式的技能包",
+    "upload": {
+      "title": "上传技能包",
+      "uploading": "上传中...",
+      "dragDrop": "拖放 ZIP 文件到此处，或点击浏览",
+      "button": "选择文件",
+      "alert": "请上传 ZIP 文件",
+      "error": "上传技能失败"
+    },
+    "list": {
+      "emptyDict": "暂无已上传技能",
+      "emptySubtitle": "上传技能包以开始使用",
+      "deleteConfirm": "确定删除技能 \"{name}\" 吗？"
+    }
+  },
+  "Tools": {
+    "title": "MCP 工具",
+    "subtitle": "来自 MCP 服务器的可用工具",
+    "search": {
+      "placeholder": "搜索工具..."
+    },
+    "list": {
+      "viewSchema": "查看 Schema",
+      "empty": "未找到匹配的工具"
+    },
+    "config": {
+      "button": "配置",
+      "title": "MCP 配置",
+      "save": "保存并重载",
+      "cancel": "取消",
+      "error": "JSON 配置无效",
+      "saving": "保存中...",
+      "reloadSuccess": "配置已保存，MCP 服务器已重载"
+    }
+  }
+}

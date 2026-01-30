@@ -12,6 +12,7 @@ from core.logger import logger
 class MCPManager:
     def __init__(self):
         self.sessions: List[ClientSession] = []
+        self.tasks: List[asyncio.Task] = []
         self._exit_stack = None
 
     async def load_mcp_servers(self, config_paths: List[str], registry: ToolRegistry):
@@ -87,36 +88,21 @@ class MCPManager:
                 env=full_env
             )
 
-            # We need to maintain the connection context
-            # For simplicity in this 'lite' version, we'll start them and keep them alive
-            # using a long-running async task or context manager.
-            # Here use a simpler approach for the prototype: 
-            # We connect, list tools, and register handlers that act as proxies.
-            
-            # NOTE: mcp.client.stdio.stdio_client is an async context manager.
-            # We need to keep it open.
-            
-            asyncio.create_task(self._run_server(name, server_params, registry))
+            task = asyncio.create_task(self._run_server(name, server_params, registry))
+            self.tasks.append(task)
 
     async def _run_server(self, name: str, params: StdioServerParameters, registry: ToolRegistry):
         try:
             async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
-                    
-                    # Store session if needed (optional)
-                    # self.sessions.append(session)
+                    self.sessions.append(session)
 
                     # List Tools
                     result = await session.list_tools()
                     
                     for tool in result.tools:
-                        # Create a wrapper handler that calls this session
-                        # We capture 'session' and 'tool.name' in the closure
-                        
                         tool_name = tool.name
-                        # Optional: namespace the tool to avoid collisions? e.g. "git_read_file"
-                        # For now, keep original name as requested by typical MCP usage
                         
                         async def make_handler(s: ClientSession, t_name: str):
                             async def handler(args: Dict[str, Any]):
@@ -127,17 +113,31 @@ class MCPManager:
                             name=tool_name,
                             description=tool.description or "",
                             input_schema=tool.inputSchema,
-                            handler=await make_handler(session, tool_name)
+                            handler=await make_handler(session, tool_name),
+                            source=name
                         )
                         if logging.getLogger().level <= logging.INFO:
                             logger.info(f"  Registered MCP tool: {tool_name} (from {name})")
 
                     # Keep the connection alive
-                    # We utilize a future to wait indefinitely until cancellation
                     await asyncio.get_running_loop().create_future()
                     
+        except asyncio.CancelledError:
+            logger.info(f"MCP Server {name} task cancelled")
         except Exception as e:
             import traceback
             logger.error(f"Error in MCP Server {name}: {e}")
             traceback.print_exc()
+
+    async def stop_all_servers(self):
+        """Stops all running MCP servers."""
+        for task in self.tasks:
+            task.cancel()
+        
+        if self.tasks:
+            await asyncio.gather(*self.tasks, return_exceptions=True)
+            
+        self.tasks = []
+        self.sessions = []
+        logger.info("Stopped all MCP servers")
 

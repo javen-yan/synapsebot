@@ -1,4 +1,4 @@
-# AgentLite
+# SynapseBot
 
 English | [简体中文](./README_zh.md)
 
@@ -8,7 +8,7 @@ A lightweight AI agent framework with MCP (Model Context Protocol) integration, 
 
 ### Core Capabilities
 
-- 🤖 **AI Agent Framework** - Powered by DeepSeek Chat with tool-calling support
+- 🤖 **AI Agent Framework** - Powered by SynapseBot (based on DeepSeek Chat) with tool-calling support
 - 🔌 **MCP Integration** - Connect to multiple MCP servers (filesystem, bash, git)
 - 🎯 **Extensible Skills** - Load custom skills from system and user directories
 - 💬 **Streaming Chat** - Real-time SSE streaming with typewriter effect
@@ -35,7 +35,7 @@ A lightweight AI agent framework with MCP (Model Context Protocol) integration, 
 
 ```bash
 git clone <repository-url>
-cd agent-lite
+cd synapse-bot
 ```
 
 2. **Install Python dependencies**
@@ -87,10 +87,10 @@ npm run dev
 ## 📁 Project Structure
 
 ```
-agent-lite/
+synapse-bot/
 ├── core/                    # Core agent logic
 │   ├── agent.py            # Main agent with streaming support
-│   ├── agent_lite.py       # Agent initialization
+│   ├── synapse_bot.py       # Agent initialization
 │   ├── llm.py              # LLM client wrapper
 │   ├── mcp_client.py       # MCP server connection
 │   ├── tools.py            # Tool registry

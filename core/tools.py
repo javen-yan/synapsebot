@@ -14,17 +14,19 @@ class Tool(BaseModel):
     description: str
     input_schema: Dict[str, Any]
     handler: Callable[[Dict[str, Any]], Awaitable[Any]]
+    source: str = "local"
 
 class ToolRegistry:
     def __init__(self):
         self._tools: Dict[str, Tool] = {}
 
-    def register(self, name: str, description: str, handler: Callable, input_schema: Dict[str, Any]):
+    def register(self, name: str, description: str, handler: Callable, input_schema: Dict[str, Any], source: str = "local"):
         self._tools[name] = Tool(
             name=name,
             description=description,
             input_schema=input_schema,
-            handler=handler
+            handler=handler,
+            source=source
         )
 
     def get_tool(self, name: str) -> Optional[Tool]:
@@ -32,6 +34,9 @@ class ToolRegistry:
 
     def list_tools(self) -> List[Tool]:
         return list(self._tools.values())
+    
+    def clear(self):
+        self._tools = {}
     
     def to_openai_tools(self) -> List[Dict[str, Any]]:
         """Converts tools to OpenAI format."""

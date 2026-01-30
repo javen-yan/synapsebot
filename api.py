@@ -1,16 +1,16 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import asyncio
+import os
 import json
-from typing import List, Optional, Dict, Any
+from typing import Dict, Any
 
-from core.agent_lite import AgentLite
+from core.synapse_bot import SynapseBot
 from core.logger import logger
 from core.skills import delete_skill, upload_skill_zip
 from core.config import load_config
 
-app = FastAPI(title="AgentLite API", version="0.1.0")
+app = FastAPI(title="SynapseBot API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,7 +21,7 @@ app.add_middleware(
 )
 
 # Global Agent App instance
-agent_app = AgentLite()
+agent_app = SynapseBot()
 
 class ChatRequest(BaseModel):
     message: str
@@ -41,7 +41,7 @@ class SkillResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Starting AgentLite API...")
+    logger.info("Starting SynapseBot API...")
     await agent_app.initialize()
 
 @app.get("/health")
@@ -108,7 +108,7 @@ async def upload_skill(file: UploadFile = File(...)):
             tmp_file_path = tmp_file.name
         
         # Extract and validate
-        skill_name = upload_skill_zip(user_skills_path, tmp_file_path)
+        skill_names = upload_skill_zip(user_skills_path, tmp_file_path)
         
         # Clean up temp file
         import os
@@ -116,7 +116,7 @@ async def upload_skill(file: UploadFile = File(...)):
         
         # Reload skills
         await agent_app.reload_skills()
-        return {"status": "uploaded", "name": skill_name}
+        return {"status": "uploaded", "names": skill_names}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -142,7 +142,45 @@ async def list_mcp_tools():
         {
             "name": t.name,
             "description": t.description,
-            "input_schema": t.input_schema
+            "input_schema": t.input_schema,
+            "source": t.source
         }
         for t in tools
     ]
+
+@app.get("/config/mcp")
+async def get_mcp_config():
+    config = load_config()
+    path = config.storage.user_mcp_config_path
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                 return {"mcpServers": {}}
+    return {"mcpServers": {}}
+
+@app.post("/config/mcp")
+async def update_mcp_config(request: Dict[str, Any]):
+    config = load_config()
+    path = config.storage.user_mcp_config_path
+    
+    # Validate structure strictly?
+    if "mcpServers" not in request:
+        raise HTTPException(status_code=400, detail="Missing mcpServers key")
+        
+    try:
+        with open(path, "w") as f:
+            json.dump(request, f, indent=2)
+        return {"status": "updated"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/mcp/reload")
+async def reload_mcp():
+    try:
+        await agent_app.reload_mcp()
+        return {"status": "reloaded"}
+    except Exception as e:
+        logger.error(f"Error reloading MCP: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

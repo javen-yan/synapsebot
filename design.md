@@ -1,8 +1,8 @@
-# AgentLite Architecture Design
+# SynapseBot Architecture Design
 
 ## 1. Overview
 
-AgentLite is a lightweight, extensible AI agent framework designed to mimic the core capabilities of advanced coding assistants (like Cursor/ClaudeCode) while allowing flexible integration of custom skills and the Model Context Protocol (MCP).
+SynapseBot is a lightweight, extensible AI agent framework designed to mimic the core capabilities of advanced coding assistants (like Cursor/ClaudeCode) while allowing flexible integration of custom skills and the Model Context Protocol (MCP).
 
 **Core Philosophy:**
 
@@ -160,7 +160,7 @@ Enables connection to the growing ecosystem of MCP servers.
 ## 5. Directory Structure
 
 ```
-agent-lite/
+synapse-bot/
 ├── config.yaml            # Main config
 ├── mcp_config.json        # MCP server config
 ├── main.py                # Entry point

@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css";
+import { useTranslations } from "next-intl";
 
 interface Message {
   role: "user" | "assistant";
@@ -14,6 +15,7 @@ interface Message {
 }
 
 export default function ChatPage() {
+  const t = useTranslations('Chat');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -83,8 +85,7 @@ export default function ChatPage() {
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];
         if (lastMessage.role === "assistant" && !lastMessage.content) {
-          lastMessage.content =
-            "Sorry, I encountered an error. Please try again.";
+          lastMessage.content = t('error');
         }
         return newMessages;
       });
@@ -102,9 +103,9 @@ export default function ChatPage() {
     <div className="flex flex-col h-screen">
       {/* Header */}
       <header className="border-b border-slate-700 p-6 bg-slate-900">
-        <h2 className="text-2xl font-semibold text-white">Chat with Agent</h2>
+        <h2 className="text-2xl font-semibold text-white">{t('title')}</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Ask questions and get intelligent responses
+          {t('subtitle')}
         </p>
       </header>
 
@@ -113,10 +114,10 @@ export default function ChatPage() {
         {messages.length === 0 && (
           <div className="text-center text-slate-400 mt-20">
             <p className="text-lg">
-              Start a conversation with your AI assistant
+              {t('emptyState.title')}
             </p>
             <p className="text-sm mt-2">
-              Try asking about available tools or skills
+              {t('emptyState.subtitle')}
             </p>
           </div>
         )}
@@ -234,13 +235,13 @@ export default function ChatPage() {
             {/* Thinking indicator - show after last message if thinking */}
             {index === messages.length - 1 && thinking && (
               <div className="flex justify-start mt-4">
-                <div className="bg-slate-800 border border-slate-700 rounded-2xl px-6 py-4 flex items-center gap-3">
+                <div className="bg-slate-800 border border-slate-600 rounded-2xl px-6 py-4 flex items-center gap-3 shadow-lg shadow-cyan-900/10">
                   <Brain className="text-cyan-400 animate-pulse" size={20} />
-                  <div className="flex gap-1">
-                    <span className="text-slate-300 text-sm">思考中</span>
-                    <span className="animate-bounce delay-0">.</span>
-                    <span className="animate-bounce delay-100">.</span>
-                    <span className="animate-bounce delay-200">.</span>
+                  <div className="flex gap-1 items-end">
+                    <span className="text-slate-200 text-sm font-medium">{t('thinking')}</span>
+                    <span className="animate-bounce delay-0 text-cyan-400 font-bold">.</span>
+                    <span className="animate-bounce delay-100 text-cyan-400 font-bold">.</span>
+                    <span className="animate-bounce delay-200 text-cyan-400 font-bold">.</span>
                   </div>
                 </div>
               </div>
@@ -259,7 +260,7 @@ export default function ChatPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Type your message..."
+            placeholder={t('placeholder')}
             className="flex-1 bg-slate-800 border border-slate-600 rounded-xl px-6 py-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
             disabled={streaming || thinking}
           />
@@ -273,7 +274,7 @@ export default function ChatPage() {
             ) : (
               <Send size={20} />
             )}
-            Send
+            {t('send')}
           </button>
         </div>
       </div>

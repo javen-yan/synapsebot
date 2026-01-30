@@ -1,4 +1,4 @@
-# AgentLite
+# SynapseBot
 
 [English](./README.md) | 简体中文
 
@@ -35,7 +35,7 @@
 
 ```bash
 git clone <repository-url>
-cd agent-lite
+cd synapse-bot
 ```
 
 2. **安装 Python 依赖**
@@ -87,10 +87,10 @@ npm run dev
 ## 📁 项目结构
 
 ```
-agent-lite/
+synapse-bot/
 ├── core/                    # 核心 agent 逻辑
 │   ├── agent.py            # 主 agent，支持流式传输
-│   ├── agent_lite.py       # Agent 初始化
+│   ├── synapse_bot.py       # Agent 初始化
 │   ├── llm.py              # LLM 客户端封装
 │   ├── mcp_client.py       # MCP 服务器连接
 │   ├── tools.py            # 工具注册表

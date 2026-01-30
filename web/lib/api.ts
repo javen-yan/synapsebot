@@ -27,6 +27,7 @@ export interface Tool {
   name: string;
   description: string;
   input_schema: any;
+  source: string;
 }
 
 export const chatApi = {
@@ -118,6 +119,18 @@ export const skillsApi = {
 export const toolsApi = {
   list: async (): Promise<Tool[]> => {
     const response = await api.get<Tool[]>('/mcp/tools');
+    return response.data;
+  },
+  getConfig: async () => {
+    const response = await api.get('/config/mcp');
+    return response.data;
+  },
+  updateConfig: async (config: any) => {
+    const response = await api.post('/config/mcp', config);
+    return response.data;
+  },
+  reload: async () => {
+    const response = await api.post('/mcp/reload');
     return response.data;
   },
 };

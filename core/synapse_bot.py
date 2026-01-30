@@ -11,7 +11,10 @@ from core.mcp_client import MCPManager
 from core.llm import LLMClient
 from core.agent import Agent
 
-class AgentLite:
+class SynapseBot(Agent):
+    """
+    SynapseBot: A lightweight agent with Skills and MCP support.
+    """
     def __init__(self):
         self.config = None
         self.registry = ToolRegistry()
@@ -21,8 +24,8 @@ class AgentLite:
         self.skills = []
         
     async def initialize(self):
-        """Initializes the AgentLite application, loading config, tools, and creating the agent."""
-        logger.print("[bold blue]AgentLite[/bold blue] Initializing...")
+        """Initializes the SynapseBot application, loading config, tools, and creating the agent."""
+        logger.print("[bold blue]SynapseBot[/bold blue] Initializing...")
         
         # 1. Load Config
         try:
@@ -68,7 +71,7 @@ class AgentLite:
         logger.print("\n[bold]Configuration Complete.[/bold] initializing Agent...")
         
         cwd = os.getcwd()
-        system_ctx = f"You are AgentLite, a helpful AI assistant with access to the following tools.\n"
+        system_ctx = f"You are SynapseBot, a helpful AI assistant with access to the following tools.\n"
         system_ctx += f"Your current working directory is: {cwd}\n"
         system_ctx += "When using file or git tools, assume this directory unless specified otherwise.\n\n"
         
@@ -91,4 +94,28 @@ class AgentLite:
         skills_paths = [self.config.storage.system_skills_path, self.config.storage.user_skills_path]
         self.skills = load_skills(skills_paths)
         logger.info(f"Skills reloaded: {len(self.skills)}")
+
+    async def reload_mcp(self):
+        """Reloads MCP servers from config."""
+        logger.warning("[yellow]Reloading MCP Servers...[/yellow]")
+        
+        # 1. Stop existing servers
+        await self.mcp_manager.stop_all_servers()
+        
+        # 2. Clear registry
+        self.registry.clear()
+        
+        # 3. Reload from config
+        # We need to re-load config in case it changed on disk
+        self.config = load_config()
+        
+        await self.mcp_manager.load_mcp_servers(
+            [self.config.storage.system_mcp_config_path, self.config.storage.user_mcp_config_path],
+            self.registry
+        )
+        
+        # 4. Update Agent (optional, but good practice if agent caches anything)
+        # In this lite version, Agent just holds ref to registry, so it sees changes immediately
+        
+        logger.print(f"[green]MCP Servers Reloaded[/green]. Tools count: {len(self.registry.list_tools())}")
 

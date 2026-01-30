@@ -11,8 +11,8 @@ from core.logger import logger
 console = Console()
 
 async def async_main():
-    from core.agent_lite import AgentLite
-    agent_app = AgentLite()
+    from core.synapse_bot import SynapseBot
+    agent_app = SynapseBot()
     await agent_app.initialize()
     
     

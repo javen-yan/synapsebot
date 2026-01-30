@@ -1,0 +1,61 @@
+{
+  "Layout": {
+    "title": "SynapseBot",
+    "subtitle": "AI Assistant Platform",
+    "nav": {
+      "chat": "Chat",
+      "skills": "Skills",
+      "tools": "Tools"
+    },
+    "version": "Version {version}"
+  },
+  "Chat": {
+    "title": "Chat with Agent",
+    "subtitle": "Ask questions and get intelligent responses",
+    "placeholder": "Type your message...",
+    "send": "Send",
+    "thinking": "Thinking",
+    "emptyState": {
+      "title": "Start a conversation with your AI assistant",
+      "subtitle": "Try asking about available tools or skills"
+    },
+    "error": "Sorry, I encountered an error. Please try again."
+  },
+  "Skills": {
+    "title": "Skills Management",
+    "subtitle": "Upload skill packages as ZIP files",
+    "upload": {
+      "title": "Upload Skill Package",
+      "uploading": "Uploading...",
+      "dragDrop": "Drag and drop a ZIP file here, or click to browse",
+      "button": "Choose File",
+      "alert": "Please upload a ZIP file",
+      "error": "Failed to upload skill"
+    },
+    "list": {
+      "emptyDict": "No skills uploaded yet",
+      "emptySubtitle": "Upload a skill package to get started",
+      "deleteConfirm": "Delete skill \"{name}\"?"
+    }
+  },
+  "Tools": {
+    "title": "MCP Tools",
+    "subtitle": "Available tools from MCP servers",
+    "search": {
+      "placeholder": "Search tools..."
+    },
+    "list": {
+      "viewSchema": "View Schema",
+      "empty": "No tools found matching your search"
+    },
+    "config": {
+      "button": "Configure",
+      "title": "MCP Configuration",
+      "save": "Save & Reload",
+      "cancel": "Cancel",
+      "error": "Invalid JSON configuration",
+      "saving": "Saving...",
+      "reloadSuccess": "Configuration saved and MCP servers reloaded"
+    }
+  }
+}

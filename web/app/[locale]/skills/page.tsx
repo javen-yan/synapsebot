@@ -3,8 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import { Upload, Trash2, Loader2, FileArchive } from "lucide-react";
 import { skillsApi, type Skill } from "@/lib/api";
+import { useTranslations } from "next-intl";
 
 export default function SkillsPage() {
+  const t = useTranslations('Skills');
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -28,7 +30,7 @@ export default function SkillsPage() {
 
   const handleFileUpload = async (file: File) => {
     if (!file.name.endsWith(".zip")) {
-      alert("Please upload a ZIP file");
+      alert(t('upload.alert'));
       return;
     }
 
@@ -38,7 +40,7 @@ export default function SkillsPage() {
       loadSkills();
     } catch (error: any) {
       console.error("Failed to upload skill:", error);
-      alert(error.response?.data?.detail || "Failed to upload skill");
+      alert(error.response?.data?.detail || t('upload.error'));
     } finally {
       setUploading(false);
     }
@@ -73,7 +75,7 @@ export default function SkillsPage() {
   };
 
   const handleDelete = async (name: string) => {
-    if (!confirm(`Delete skill "${name}"?`)) return;
+    if (!confirm(t('list.deleteConfirm', {name}))) return;
     try {
       await skillsApi.delete(name);
       loadSkills();
@@ -86,9 +88,9 @@ export default function SkillsPage() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-8">
-        <h2 className="text-2xl font-semibold text-white">Skills Management</h2>
+        <h2 className="text-2xl font-semibold text-white">{t('title')}</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Upload skill packages as ZIP files
+          {t('subtitle')}
         </p>
       </div>
 
@@ -113,10 +115,10 @@ export default function SkillsPage() {
             )}
           </div>
           <h3 className="text-lg font-semibold text-white mb-2">
-            {uploading ? "Uploading..." : "Upload Skill Package"}
+            {uploading ? t('upload.uploading') : t('upload.title')}
           </h3>
           <p className="text-slate-400 text-sm mb-4">
-            Drag and drop a ZIP file here, or click to browse
+            {t('upload.dragDrop')}
           </p>
           <input
             ref={fileInputRef}
@@ -132,7 +134,7 @@ export default function SkillsPage() {
             className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-50 rounded-lg px-6 py-3 font-medium transition-all flex items-center gap-2 text-white"
           >
             <Upload size={20} />
-            Choose File
+            {t('upload.button')}
           </button>
         </div>
       </div>
@@ -144,8 +146,8 @@ export default function SkillsPage() {
         </div>
       ) : skills.length === 0 ? (
         <div className="text-center text-slate-400 py-12">
-          <p>No skills uploaded yet</p>
-          <p className="text-sm mt-2">Upload a skill package to get started</p>
+          <p>{t('list.emptyDict')}</p>
+          <p className="text-sm mt-2">{t('list.emptySubtitle')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

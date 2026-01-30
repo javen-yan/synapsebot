@@ -6,3 +6,5 @@ llm:
 
 storage:
   data_path: "./data"
+
+log_level: "INFO"
