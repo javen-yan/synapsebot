@@ -1,0 +1,23 @@
+[project]
+name = "agent-lite"
+version = "0.1.0"
+description = "A lightweight agent system with Skills and MCP support"
+authors = [
+    {name = "Javen"}
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openai (>=2.16.0,<3.0.0)",
+    "pyyaml (>=6.0.3,<7.0.0)",
+    "pydantic (>=2.12.5,<3.0.0)",
+    "rich (>=14.3.1,<15.0.0)",
+    "mcp (>=1.26.0,<2.0.0)",
+    "mcp-server-git (>=2026.1.14,<2027.0.0)",
+    "prompt-toolkit (>=3.0.52,<4.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

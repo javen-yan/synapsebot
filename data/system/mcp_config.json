@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "python",
+      "args": ["-u", "./mcp_server_fs.py"]
+    },
+    "bash": {
+      "command": "python",
+      "args": ["-u", "./mcp_server_bash.py"]
+    }
+  }
+}

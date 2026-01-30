@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Distribution / Packaging
+dist/
+build/
+*.egg-info/
+
+# Project Specific
+config.yaml
+inspect_tools.py
+.gemini/
+
+# User Data (Optional - depending on if you want to commit user skills)
+# data/user/
+
+# IDE
+.vscode/
+.idea/
+
+
+node_modules
