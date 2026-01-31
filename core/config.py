@@ -1,6 +1,6 @@
 import os
 import yaml
-from pathlib import Path
+from typing import Optional
 from pydantic import BaseModel, Field
 
 class LLMConfig(BaseModel):
@@ -60,15 +60,35 @@ class FeishuConfig(BaseModel):
     app_id: str = Field(default="")
     app_secret: str = Field(default="")
 
+class WebConfig(BaseModel):
+    enabled: bool = True # Default to True for now
+
 class ChannelsConfig(BaseModel):
     slack: SlackConfig = Field(default_factory=SlackConfig)
     feishu: FeishuConfig = Field(default_factory=FeishuConfig)
+    web: WebConfig = Field(default_factory=WebConfig)
 
 class Config(BaseModel):
     llm: LLMConfig
     storage: StorageConfig
     channels: ChannelsConfig = Field(default_factory=ChannelsConfig)
     log_level: str = "INFO"
+
+
+# Global singleton instance
+_config_instance: Optional["Config"] = None
+
+def get_config(config_path: str = "config.yaml", reload: bool = False) -> "Config":
+    """
+    Get the global configuration instance. 
+    Loads it if it hasn't been loaded yet or if reload is True.
+    """
+    global _config_instance
+    
+    if _config_instance is None or reload:
+        _config_instance = load_config(config_path)
+        
+    return _config_instance
 
 def load_config(config_path: str = "config.yaml") -> Config:
     if not os.path.exists(config_path):
@@ -85,19 +105,21 @@ def load_config(config_path: str = "config.yaml") -> Config:
 
     # Expand Slack env vars
     slack_cfg = raw_config.get("channels", {}).get("slack", {})
-    for field in ["bot_token", "app_token"]:
-        val = slack_cfg.get(field, "")
-        if val.startswith("${") and val.endswith("}"):
-            env_var = val[2:-1]
-            raw_config.setdefault("channels", {}).setdefault("slack", {})[field] = os.getenv(env_var, "")
+    if slack_cfg: 
+        for field in ["bot_token", "app_token"]:
+            val = slack_cfg.get(field, "")
+            if val and val.startswith("${") and val.endswith("}"):
+                env_var = val[2:-1]
+                raw_config.setdefault("channels", {}).setdefault("slack", {})[field] = os.getenv(env_var, "")
 
     # Expand Feishu env vars
     feishu_cfg = raw_config.get("channels", {}).get("feishu", {})
-    for field in ["app_id", "app_secret"]:
-        val = feishu_cfg.get(field, "")
-        if val.startswith("${") and val.endswith("}"):
-            env_var = val[2:-1]
-            raw_config.setdefault("channels", {}).setdefault("feishu", {})[field] = os.getenv(env_var, "")
+    if feishu_cfg:
+        for field in ["app_id", "app_secret"]:
+            val = feishu_cfg.get(field, "")
+            if val and val.startswith("${") and val.endswith("}"):
+                env_var = val[2:-1]
+                raw_config.setdefault("channels", {}).setdefault("feishu", {})[field] = os.getenv(env_var, "")
         
     config = Config(**raw_config)
     

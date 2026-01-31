@@ -1,0 +1,95 @@
+# Build ignore patterns for Docker
+.git
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+.eggs
+
+# Virtual environments
+venv
+env
+ENV
+.venv
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs
+**/*.log
+
+# Temporary files
+tmp
+**/tmp
+.tmp
+**/.tmp
+*.tmp
+
+# Node.js
+node_modules
+**/node_modules
+.npm
+.pnpm-store
+**/.pnpm-store
+
+# Next.js
+.next
+**/.next
+out
+**/.next/cache
+
+# Build artifacts
+dist
+**/dist
+build
+**/build
+
+# Coverage
+coverage
+**/coverage
+.coverage
+htmlcov
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Data (will be mounted as volume)
+data/uploads/*
+data/user/skills/*
+
+# Documentation
+docs
+README*.md
+*.md
+!BUILD.md
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# Reference files
+temp_openclaw2

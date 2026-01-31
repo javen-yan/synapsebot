@@ -5,7 +5,8 @@
     "nav": {
       "chat": "Chat",
       "skills": "Skills",
-      "tools": "Tools"
+      "tools": "Tools",
+      "terminal": "Terminal"
     },
     "version": "Version {version}"
   },

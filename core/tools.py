@@ -1,5 +1,5 @@
 from typing import Any, Dict, List, Optional, Callable, Awaitable
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 class ToolCall(BaseModel):
     name: str

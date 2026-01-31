@@ -2,7 +2,7 @@ import os
 import yaml
 import shutil
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Optional
 from pydantic import BaseModel
 
 class SkillMetadata(BaseModel):

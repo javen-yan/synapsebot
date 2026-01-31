@@ -1,16 +1,10 @@
-import asyncio
-import sys
-import os
-from rich.console import Console
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
 
-from rich.console import Console
 from core.logger import logger
 
-console = Console()
-
-async def async_main():
+async def start_cli():
+    """Starts the interactive CLI session."""
     from core.synapse_bot import SynapseBot
     agent_app = SynapseBot()
     await agent_app.initialize()
@@ -42,9 +36,3 @@ async def async_main():
 
     # Terminate
     logger.print("[bold]Goodbye![/bold]")
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(async_main())
-    except KeyboardInterrupt:
-        pass

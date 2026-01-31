@@ -1,22 +1,21 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import os
 import shutil
 import uuid
 import json
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 
 from core.synapse_bot import SynapseBot
 from core.logger import logger
 from core.skills import delete_skill, upload_skill_zip
-from core.config import load_config
+from core.config import get_config
 
 app = FastAPI(title="SynapseBot API", version="0.1.0")
 
-config = load_config()
+config = get_config()
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,24 +28,6 @@ app.add_middleware(
 # Global Agent App instance
 agent_app = SynapseBot()
 
-class ChatRequest(BaseModel):
-    message: str
-    files: List[str] = [] # List of file paths returned by /upload
-
-
-class ChatResponse(BaseModel):
-    response: str
-    
-class SkillRequest(BaseModel):
-    name: str
-    description: str
-    instructions: str
-    
-class SkillResponse(BaseModel):
-    name: str
-    description: str
-    path: str
-
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting SynapseBot API...")
@@ -55,62 +36,33 @@ async def startup_event():
     # Initialize Slack Bot if enabled
     if agent_app.config.channels.slack.enabled:
         from core.channels.slack import SlackBot
-        slack_bot = SlackBot(agent_app.config, agent_app.registry)
+        # Pass event_bus
+        slack_bot = SlackBot(agent_app.config, agent_app.registry, agent_app.event_bus)
         # Start in background
         asyncio.create_task(slack_bot.start())
 
     # Initialize Feishu Bot if enabled
     if agent_app.config.channels.feishu.enabled:
         from core.channels.feishu import FeishuBot
-        feishu_bot = FeishuBot(agent_app.config, agent_app.registry)
+        # Pass event_bus
+        feishu_bot = FeishuBot(agent_app.config, agent_app.registry, agent_app.event_bus)
         # Start in background
         asyncio.create_task(feishu_bot.start())
 
+    # Initialize Web Bot if enabled
+    if agent_app.config.channels.web.enabled:
+        from core.channels.web import WebBot
+        # Pass event_bus
+        web_bot = WebBot(agent_app.config, agent_app.registry, agent_app.event_bus)
+        # Start in background
+        asyncio.create_task(web_bot.start())
+        # Initialize Web Bot Router
+        app.include_router(web_bot.router)
+        
+
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "agent_initialized": agent_app.agent is not None}
-
-@app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    if not agent_app.agent:
-        raise HTTPException(status_code=503, detail="Agent not initialized")
-    
-    try:
-        # Prepare message with attachments
-        full_message = request.message
-        if request.files:
-            file_note = "\n[System: User attached files:]\n" + "\n".join([f"- {path}" for path in request.files])
-            full_message += file_note
-
-        response_content = await agent_app.agent.run(full_message)
-        return ChatResponse(response=response_content)
-    except Exception as e:
-        logger.error(f"Error processing chat: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/chat/stream")
-async def chat_stream(request: ChatRequest):
-    """Streaming chat endpoint using Server-Sent Events."""
-    if not agent_app.agent:
-        raise HTTPException(status_code=503, detail="Agent not initialized")
-    
-    from fastapi.responses import StreamingResponse
-    
-    async def event_generator():
-        try:
-            # Prepare message with attachments
-            full_message = request.message
-            if request.files:
-                file_note = "\n[System: User attached files:]\n" + "\n".join([f"- {path}" for path in request.files])
-                full_message += file_note
-
-            async for chunk in agent_app.agent.run_stream(full_message):
-                yield chunk
-        except Exception as e:
-            logger.error(f"Error in stream: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
-    
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return {"status": "ok", "agent_initialized": agent_app.dispatcher is not None}
 
 @app.get("/skills")
 async def list_skills():
@@ -216,10 +168,19 @@ async def upload_file(file: UploadFile = File(...)):
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
+        
+        # Get file size
+        file_size = os.path.getsize(file_path)
+        
         # We return the absolute path so the agent can read it directly
         abs_path = os.path.abspath(file_path)
-        return {"filename": file.filename, "path": abs_path, "url": f"/files/{unique_name}"}
+        return {
+            "name": file.filename,
+            "path": abs_path,
+            "url": f"/files/{unique_name}",
+            "size": file_size,
+            "type": file.content_type or "application/octet-stream"
+        }
     except Exception as e:
         logger.error(f"Error uploading file: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -252,3 +213,84 @@ async def reload_mcp():
     except Exception as e:
         logger.error(f"Error reloading MCP: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+import pty
+from fastapi import WebSocket, WebSocketDisconnect
+# Reuse WebSocket import but careful about naming collision if we import again
+# Just use the top level import
+
+@app.websocket("/ws/shell")
+async def websocket_shell(websocket: WebSocket):
+    await websocket.accept()
+    
+    # Create PTY
+    master_fd, slave_fd = pty.openpty()
+    
+    # Spawn shell
+    shell = os.environ.get("SHELL", "/bin/bash")
+    pid = os.fork()
+    
+    if pid == 0:
+        # Child process
+        os.setsid()
+        os.dup2(slave_fd, 0)
+        os.dup2(slave_fd, 1)
+        os.dup2(slave_fd, 2)
+        os._exit(os.execv(shell, [shell]))
+    
+    # Parent process
+    os.close(slave_fd)
+    
+    async def read_from_pty():
+        try:
+            while True:
+                # Read from PTY 
+                data = await asyncio.to_thread(os.read, master_fd, 1024)
+                if not data:
+                    break
+                await websocket.send_bytes(data)
+        except OSError:
+            pass # Process exited
+        except Exception as e:
+            logger.error(f"Error reading from PTY: {e}")
+
+    try:
+        # Start reading task
+        read_task = asyncio.create_task(read_from_pty())
+        
+        while True:
+            # Receive from WebSocket
+            data = await websocket.receive()
+            
+            if "text" in data:
+                # Resize command? Or just text input?
+                msg = data["text"]
+                if msg.startswith("RESIZE:"):
+                    try:
+                        _, rows, cols = msg.split(":")
+                        # Set window size
+                        winsize = struct.pack("HHHH", int(rows), int(cols), 0, 0)
+                        fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+                    except Exception as e:
+                        logger.error(f"Failed to resize PTY: {e}")
+                else:
+                     os.write(master_fd, msg.encode())
+            elif "bytes" in data:
+                 os.write(master_fd, data["bytes"])
+                 
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected")
+    except Exception as e:
+        logger.error(f"WebSocket shell error: {e}")
+    finally:
+        # Cleanup
+        try:
+            os.kill(pid, signal.SIGTERM)
+            os.waitpid(pid, 0)
+        except Exception:
+            pass
+        try:
+            os.close(master_fd)
+        except Exception:
+            pass
+        logger.info("Shell session closed")

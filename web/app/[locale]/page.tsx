@@ -9,10 +9,17 @@ import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css";
 import { useTranslations } from "next-intl";
 
+interface FileObject {
+  name: string;
+  url: string;
+  size: number;
+  type: string;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
-  files?: string[];
+  files?: Array<string | FileObject>; // Support both string (for user display) and FileObject (from agent)
 }
 
 export default function ChatPage() {
@@ -28,6 +35,67 @@ export default function ChatPage() {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  // WebSocket Client Ref
+  const wsClientRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Connect WebSocket on mount
+    wsClientRef.current = chatApi.connectWebSocket(
+        // onMessage (Chunk or Final)
+        (data: any) => {
+            setStreaming(true);
+            setThinking(false);
+            setMessages((prev) => {
+                const newMessages = [...prev];
+                const lastMessage = newMessages[newMessages.length - 1];
+                if (lastMessage.role === "assistant") {
+                     // Check if it's content chunk
+                     if (data.content) {
+                         lastMessage.content += data.content;
+                     }
+                     // Check if it has files (from message type)
+                     if (data.files && Array.isArray(data.files)) {
+                         lastMessage.files = data.files;
+                     }
+                }
+                return newMessages;
+            });
+        },
+        // onStatus (Stage updates)
+        (data: any) => {
+            // data.stage could be "prompt", "process", "response"
+            // data.content is the message "Thinking...", "Calling tool..."
+            if (data.stage === "process") {
+                 setThinking(true);
+                 // Optional: Show specific status text if UI supports it
+                 // For now, page.tsx just has boolean thinking. 
+                 // We could add a statusText state.
+            } else if (data.stage === "response") {
+                 setThinking(false); 
+                 setStreaming(true);
+            }
+        },
+        // onError
+        (error: string) => {
+            console.error("WS Error:", error);
+            setThinking(false);
+            setStreaming(false);
+            // Append error message?
+        },
+        // onDone
+        () => {
+            setThinking(false);
+            setStreaming(false);
+        }
+    );
+
+    return () => {
+        if (wsClientRef.current) {
+            wsClientRef.current.close();
+        }
+    };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
@@ -46,14 +114,13 @@ export default function ChatPage() {
   const handleSend = async () => {
     if ((!input.trim() && selectedFiles.length === 0) || streaming) return;
 
-    let uploadedFilePaths: string[] = [];
+    let uploadedFiles: Array<{name: string; url: string; size: number; type: string}> = [];
 
     // 1. Upload files first
     if (selectedFiles.length > 0) {
       try {
         const uploadPromises = selectedFiles.map((file) => chatApi.uploadFile(file));
-        const uploaded = await Promise.all(uploadPromises);
-        uploadedFilePaths = uploaded.map((u) => u.path);
+        uploadedFiles = await Promise.all(uploadPromises);
       } catch (error) {
         console.error("Upload error:", error);
         alert("Failed to upload files");
@@ -64,70 +131,24 @@ export default function ChatPage() {
     const userMessage: Message = { 
         role: "user", 
         content: input,
-        files: selectedFiles.map(f => f.name) // Store filenames for display
+        files: uploadedFiles.map(f => f.name) 
     };
     
     setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setSelectedFiles([]);
-    setThinking(true);
-
+    
     // Add empty assistant message that will be filled
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
-    try {
-      await chatApi.sendMessageStream(
-        input,
-        uploadedFilePaths,
-        // onChunk
-        // onChunk
-        (chunk: string) => {
-          setThinking(false);
-          setStreaming(true);
-          setMessages((prev) => {
-            const newMessages = [...prev];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage.role === "assistant") {
-              lastMessage.content += chunk;
-            }
-            return newMessages;
-          });
-        },
-        // onError
-        (error: string) => {
-          console.error("Stream error:", error);
-          setThinking(false);
-          setStreaming(false);
-          setMessages((prev) => {
-            const newMessages = [...prev];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage.role === "assistant" && !lastMessage.content) {
-              lastMessage.content = `Error: ${error}`;
-            }
-            return newMessages;
-          });
-        },
-        // onDone
-        () => {
-          setThinking(false);
-          setStreaming(false);
-        },
-      );
-    } catch (error) {
-      console.error("Chat error:", error);
-      setThinking(false);
-      setStreaming(false);
-      setMessages((prev) => {
-        const newMessages = [...prev];
-        const lastMessage = newMessages[newMessages.length - 1];
-        if (lastMessage.role === "assistant" && !lastMessage.content) {
-          lastMessage.content = t('error');
-        }
-        return newMessages;
-      });
+    // Send via WebSocket with file objects (not paths)
+    if (wsClientRef.current) {
+        wsClientRef.current.send(input, uploadedFiles);
     }
-  };
 
+    setInput("");
+    setSelectedFiles([]);
+    setThinking(true); // Assume thinking starts immediately
+  };
+  
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -174,130 +195,138 @@ export default function ChatPage() {
                   <div>
                     {message.files && message.files.length > 0 && (
                         <div className="flex flex-wrap gap-2 mb-2">
-                            {message.files.map((file, i) => (
-                                <div key={i} className="flex items-center gap-1 bg-white/20 rounded px-2 py-1 text-xs">
-                                    <Paperclip size={12} />
-                                    <span>{file}</span>
-                                </div>
-                            ))}
+                            {message.files.map((file, i) => {
+                                const fileName = typeof file === 'string' ? file : file.name;
+                                return (
+                                    <div key={i} className="flex items-center gap-1 bg-white/20 rounded px-2 py-1 text-xs">
+                                        <Paperclip size={12} />
+                                        <span>{fileName}</span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
                     <p className="whitespace-pre-wrap">{message.content}</p>
                   </div>
                 ) : (
-                  <div className="prose prose-invert prose-slate max-w-none prose-headings:text-white prose-p:text-slate-200 prose-strong:text-white prose-code:text-cyan-300">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeHighlight]}
-                      components={{
-                        // Custom renderer for detecting [FILE: /path]
-                        code: ({ node, inline, className, children, ...props }: any) => {
-                             const content = String(children);
-                             const fileMatch = content.match(/^\[FILE:\s*(.*?)\]$/);
-                             
-                             if (fileMatch) {
-                                 const path = fileMatch[1];
-                                 const filename = path.split('/').pop() || "download";
-                                 // Construct download URL - assuming API serves it at /files/filename
-                                 // Note: This relies on the API's simple file serving which checks basic dirs.
-                                 const downloadUrl = `${chatApi.API_BASE_URL || 'http://localhost:8000'}/files/${filename}`;
-                                 
-                                 return (
-                                     <a 
-                                        href={downloadUrl} 
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg p-3 my-2 no-underline group transition-colors"
-                                     >
-                                        <div className="bg-cyan-500/20 p-2 rounded-lg text-cyan-400 group-hover:text-cyan-300">
-                                            <FileText size={24} />
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-medium text-slate-200 group-hover:text-white">{filename}</p>
-                                            <p className="text-xs text-slate-400">Click to download</p>
-                                        </div>
-                                     </a>
-                                 );
-                             }
-
-                          return inline ? (
-                            <code
-                              className="bg-slate-700 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-sm"
+                  <div>
+                    <div className="prose prose-invert prose-slate max-w-none prose-headings:text-white prose-p:text-slate-200 prose-strong:text-white prose-code:text-cyan-300">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeHighlight]}
+                        components={{
+                          code: ({ node, inline, className, children, ...props }: any) => {
+                            return inline ? (
+                              <code
+                                className="bg-slate-700 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-sm"
+                                {...props}
+                              >
+                                {children}
+                              </code>
+                            ) : (
+                              <code className={className} {...props}>
+                                {children}
+                              </code>
+                            );
+                          },
+                          pre: ({ children, ...props }: any) => (
+                            <pre
+                              className="bg-slate-900 border border-slate-700 rounded-lg p-4 overflow-x-auto my-3"
                               {...props}
                             >
                               {children}
-                            </code>
-                          ) : (
-                            <code className={className} {...props}>
+                            </pre>
+                          ),
+                          a: ({ children, ...props }: any) => (
+                            <a
+                              className="text-cyan-400 hover:text-cyan-300 underline"
+                              {...props}
+                            >
                               {children}
-                            </code>
-                          );
-                        },
-                        pre: ({ children, ...props }: any) => (
-                          <pre
-                            className="bg-slate-900 border border-slate-700 rounded-lg p-4 overflow-x-auto my-3"
-                            {...props}
-                          >
-                            {children}
-                          </pre>
-                        ),
-                        a: ({ children, ...props }: any) => (
-                          <a
-                            className="text-cyan-400 hover:text-cyan-300 underline"
-                            {...props}
-                          >
-                            {children}
-                          </a>
-                        ),
-                        ul: ({ children, ...props }: any) => (
-                          <ul
-                            className="list-disc list-inside space-y-1 my-2"
-                            {...props}
-                          >
-                            {children}
-                          </ul>
-                        ),
-                        ol: ({ children, ...props }: any) => (
-                          <ol
-                            className="list-decimal list-inside space-y-1 my-2"
-                            {...props}
-                          >
-                            {children}
-                          </ol>
-                        ),
-                        h1: ({ children, ...props }: any) => (
-                          <h1
-                            className="text-2xl font-bold mt-4 mb-2 text-white"
-                            {...props}
-                          >
-                            {children}
-                          </h1>
-                        ),
-                        h2: ({ children, ...props }: any) => (
-                          <h2
-                            className="text-xl font-bold mt-3 mb-2 text-white"
-                            {...props}
-                          >
-                            {children}
-                          </h2>
-                        ),
-                        h3: ({ children, ...props }: any) => (
-                          <h3
-                            className="text-lg font-semibold mt-2 mb-1 text-white"
-                            {...props}
-                          >
-                            {children}
-                          </h3>
-                        ),
-                        p: ({ children, ...props }: any) => (
-                          <p className="my-2 text-slate-200" {...props}>
-                            {children}
-                          </p>
-                        ),
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
+                            </a>
+                          ),
+                          ul: ({ children, ...props }: any) => (
+                            <ul
+                              className="list-disc list-inside space-y-1 my-2"
+                              {...props}
+                            >
+                              {children}
+                            </ul>
+                          ),
+                          ol: ({ children, ...props }: any) => (
+                            <ol
+                              className="list-decimal list-inside space-y-1 my-2"
+                              {...props}
+                            >
+                              {children}
+                            </ol>
+                          ),
+                          h1: ({ children, ...props }: any) => (
+                            <h1
+                              className="text-2xl font-bold mt-4 mb-2 text-white"
+                              {...props}
+                            >
+                              {children}
+                            </h1>
+                          ),
+                          h2: ({ children, ...props }: any) => (
+                            <h2
+                              className="text-xl font-bold mt-3 mb-2 text-white"
+                              {...props}
+                            >
+                              {children}
+                            </h2>
+                          ),
+                          h3: ({ children, ...props }: any) => (
+                            <h3
+                              className="text-lg font-semibold mt-2 mb-1 text-white"
+                              {...props}
+                            >
+                              {children}
+                            </h3>
+                          ),
+                          p: ({ children, ...props }: any) => (
+                            <p className="my-2 text-slate-200" {...props}>
+                              {children}
+                            </p>
+                          ),
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                    
+                    {/* Render file attachments */}
+                    {message.files && message.files.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {message.files.map((file, i) => {
+                          // Only render FileObject, skip strings
+                          if (typeof file === 'object') {
+                            const downloadUrl = `${chatApi.API_BASE_URL || 'http://localhost:8000'}${file.url}`;
+                            const fileSizeKB = (file.size / 1024).toFixed(1);
+                            
+                            return (
+                              <a
+                                key={i}
+                                href={downloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg p-3 no-underline group transition-colors"
+                              >
+                                <div className="bg-cyan-500/20 p-2 rounded-lg text-cyan-400 group-hover:text-cyan-300">
+                                  <FileText size={24} />
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-slate-200 group-hover:text-white">{file.name}</p>
+                                  <p className="text-xs text-slate-400">{fileSizeKB} KB • {file.type}</p>
+                                </div>
+                              </a>
+                            );
+                          }
+                          return null;
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

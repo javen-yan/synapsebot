@@ -1,0 +1,68 @@
+services:
+  synapsebot-server:
+    image: ${SYNAPSEBOT_IMAGE:-synapsebot:local}
+    container_name: synapsebot-server
+    environment:
+      HOME: /home/synapsebot
+      TERM: xterm-256color
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      FEISHU_APP_ID: ${FEISHU_APP_ID:-}
+      FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
+    volumes:
+      - ${SYNAPSEBOT_CONFIG_DIR:-./config.yaml}:/app/config.yaml:ro
+      - ${SYNAPSEBOT_DATA_DIR:-./data}:/app/data
+      - synapsebot-home:/home/synapsebot
+    ports:
+      - "${SYNAPSEBOT_API_PORT:-8000}:8000"
+    init: true
+    restart: unless-stopped
+    command:
+      ["python", "main.py", "server", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  synapsebot-web:
+    image: ${SYNAPSEBOT_IMAGE:-synapsebot:local}
+    container_name: synapsebot-web
+    environment:
+      HOME: /home/synapsebot
+      TERM: xterm-256color
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    volumes:
+      - synapsebot-home:/home/synapsebot
+    ports:
+      - "${SYNAPSEBOT_WEB_PORT:-3000}:3000"
+    init: true
+    restart: unless-stopped
+    depends_on:
+      synapsebot-server:
+        condition: service_healthy
+    working_dir: /app/web
+    command: ["npm", "start"]
+
+  synapsebot-cli:
+    image: ${SYNAPSEBOT_IMAGE:-synapsebot:local}
+    container_name: synapsebot-cli
+    environment:
+      HOME: /home/synapsebot
+      TERM: xterm-256color
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+    volumes:
+      - ${SYNAPSEBOT_CONFIG_DIR:-./config.yaml}:/app/config.yaml:ro
+      - ${SYNAPSEBOT_DATA_DIR:-./data}:/app/data
+      - synapsebot-home:/home/synapsebot
+    stdin_open: true
+    tty: true
+    init: true
+    profiles:
+      - cli
+    entrypoint: ["python", "main.py", "cli"]
+
+volumes:
+  synapsebot-home:

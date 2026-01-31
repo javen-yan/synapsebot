@@ -1,11 +1,13 @@
 import json
 import asyncio
+from typing import List, Dict, Any, Callable, Awaitable, Optional
 from rich.markdown import Markdown
-from rich.panel import Panel
 from mcp.types import TextContent, ImageContent, EmbeddedResource
 from core.llm import LLMClient
 from core.tools import ToolRegistry
 from core.logger import logger
+
+from core.stage import AgentStage
 
 class Agent:
     def __init__(self, llm: LLMClient, registry: ToolRegistry, system_prompt: str):
@@ -16,13 +18,19 @@ class Agent:
             {"role": "system", "content": system_prompt}
         ]
 
-    async def run(self, user_input: str):
+    async def run(self, user_input: str, stage_callback: Optional[Callable[[AgentStage, str], Awaitable[None]]] = None):
         self.messages.append({"role": "user", "content": user_input})
+        
+        # Notify PROMPT stage
+        if stage_callback:
+            await stage_callback(AgentStage.PROMPT, user_input)
         
         while True:
             # 1. Think
-            # 1. Think
             logger.debug("[dim]Thinking...[/dim]")
+            if stage_callback:
+                await stage_callback(AgentStage.PROCESS, "Thinking...")
+
             tools_schema = self.registry.to_openai_tools()
             
             try:
@@ -45,6 +53,8 @@ class Agent:
                     
                     
                     logger.debug(f"  -> Calling [cyan]{function_name}[/cyan] with {arguments_str}")
+                    if stage_callback:
+                        await stage_callback(AgentStage.PROCESS, f"Calling tool: {function_name}")         
                     
                     try:
                         arguments = json.loads(arguments_str)
@@ -116,29 +126,44 @@ class Agent:
                 logger.print(Markdown(content))
                 return content
 
-    async def run_stream(self, user_input: str):
-        """Runs the agent with streaming output for SSE."""
+    async def run_raw_stream(self, user_input: str, stage_callback: Optional[Callable[[AgentStage, str], Awaitable[None]]] = None):
+        """Runs the agent and yields raw text chunks."""
         self.messages.append({"role": "user", "content": user_input})
         
+        # Notify PROMPT stage
+        if stage_callback:
+            await stage_callback(AgentStage.PROMPT, user_input)
+        
         while True:
+            # 1. Think
+            logger.debug("[dim]Thinking...[/dim]")
+            if stage_callback:
+                await stage_callback(AgentStage.PROCESS, "Thinking...")
+                
             tools_schema = self.registry.to_openai_tools()
             
             try:
                 response = await self.llm.chat(self.messages, tools=tools_schema)
                 message = response.choices[0].message
             except Exception as e:
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                logger.error(f"LLM Error in stream: {e}")
+                msg = f"Error: {str(e)}"
+                # Yield error as content
+                yield msg
                 return
 
             self.messages.append(message)
 
-            # If tool calls, execute them silently (no streaming)
+            # If tool calls, execute them silently (no streaming for tools yet)
             if message.tool_calls:
                 for tool_call in message.tool_calls:
                     function_name = tool_call.function.name
                     arguments_str = tool_call.function.arguments
                     call_id = tool_call.id
                     
+                    if stage_callback:
+                        await stage_callback(AgentStage.PROCESS, f"Calling tool: {function_name}")
+                        
                     try:
                         arguments = json.loads(arguments_str)
                         tool = self.registry.get_tool(function_name)
@@ -191,15 +216,16 @@ class Agent:
                             "content": error_msg
                         })
             else:
-                # Stream only the final response
+                # Top-level response. 
+                # Simulate streaming by chunking the final content.
                 content = message.content or ""
-                # Stream by lines to preserve markdown formatting
+                
+                # In a real streaming LLM client, we would yield chunks from llm.chat_stream
+                # Here we just chunk the static response.
                 lines = content.split('\n')
                 for i, line in enumerate(lines):
                     # Add newline except for last line
                     chunk = line + ('\n' if i < len(lines) - 1 else '')
-                    yield f"data: {json.dumps({'type': 'content', 'chunk': chunk})}\n\n"
-                    await asyncio.sleep(0.05)
-                
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                    yield chunk
+                    await asyncio.sleep(0.02) # Small delay to simulate stream
                 return

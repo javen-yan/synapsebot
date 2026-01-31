@@ -37,66 +37,68 @@ export const chatApi = {
     const response = await api.post<ChatResponse>('/chat', { message, files });
     return response.data;
   },
-  sendMessageStream: async (
-    message: string,
-    files: string[] = [],
-    onChunk: (chunk: string) => void,
+  connectWebSocket: (
+    onMessage: (data: any) => void,
+    onStatus: (data: any) => void,
     onError: (error: string) => void,
     onDone: () => void
   ) => {
-    const response = await fetch(`${API_BASE_URL}/chat/stream`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ message, files }),
-    });
+    // Convert http(s) to ws(s)
+    const wsProtocol = API_BASE_URL.startsWith('https') ? 'wss' : 'ws';
+    const wsUrl = `${API_BASE_URL.replace(/^https?:\/\//, '')}/ws/chat`;
+    
+    // Construct full URL with protocol
+    const socket = new WebSocket(`${wsProtocol}://${wsUrl}`);
 
-    if (!response.ok) {
-      throw new Error('Stream request failed');
-    }
+    socket.onopen = () => {
+      console.log('WebSocket Connected');
+    };
 
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-
-    if (!reader) {
-      throw new Error('No response body');
-    }
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            try {
-              const parsed = JSON.parse(data);
-              
-              if (parsed.type === 'content') {
-                onChunk(parsed.chunk);
-              } else if (parsed.type === 'done') {
-                onDone();
-                return;
-              } else if (parsed.error || parsed.type === 'error') {
-                onError(parsed.error || 'Unknown error');
-                return;
-              }
-            } catch (e) {
-              // Ignore parse errors for incomplete chunks
-            }
-          }
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'status') {
+            onStatus(data);
+        } else if (data.type === 'chunk') {
+            // Chunk with content
+            onMessage(data);
+        } else if (data.type === 'message') {
+            // Final message with files
+            onMessage(data);
+        } else if (data.type === 'done') {
+            // Streaming complete
+            onDone();
+        } else if (data.error) {
+            onError(data.error);
         }
+      } catch (e) {
+        console.error("WS Parse Error", e);
       }
-    } finally {
-      reader.releaseLock();
-    }
+    };
+
+    socket.onerror = (error) => {
+      console.error("WebSocket Error", error);
+      onError("WebSocket connection error");
+    };
+
+    socket.onclose = () => {
+      console.log('WebSocket Disconnected');
+    };
+
+    return {
+        send: (message: string, files: string[] = []) => {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ text: message, files }));
+            } else {
+                console.warn("WebSocket not open");
+                onError("Connection lost");
+            }
+        },
+        close: () => socket.close()
+    };
   },
-  uploadFile: async (file: File): Promise<{ filename: string; path: string; url: string }> => {
+  uploadFile: async (file: File): Promise<{ name: string; path: string; url: string; size: number; type: string }> => {
     const formData = new FormData();
     formData.append('file', file);
     const response = await api.post('/upload', formData, {

@@ -3,7 +3,7 @@ import os
 import json
 import shutil
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from core.tools import ToolRegistry

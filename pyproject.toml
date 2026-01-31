@@ -1,5 +1,5 @@
 [project]
-name = "synapse-bot"
+name = "synapsebot"
 version = "0.1.0"
 description = "A lightweight agent system with Skills and MCP support"
 authors = [
@@ -23,6 +23,9 @@ dependencies = [
     "aiohttp (>=3.13.3,<4.0.0)",
     "lark-oapi (==1.5.3)"
 ]
+
+[project.scripts]
+synapsebot = "main:main"
 
 [tool.poetry]
 package-mode = false

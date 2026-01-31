@@ -1,7 +1,7 @@
 import { Inter } from "next/font/google";
 import "@/app/globals.css";
 import Link from "next/link";
-import { MessageSquare, Wrench, Boxes } from "lucide-react";
+import { MessageSquare, Wrench, Boxes, Terminal } from "lucide-react";
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getTranslations } from 'next-intl/server';
 
@@ -54,6 +54,9 @@ export default async function RootLayout({
                 <NavLink href={`/${locale}/tools`} icon={<Wrench size={20} />}>
                   {t('nav.tools')}
                 </NavLink>
+                <NavLink href={`/${locale}/terminal`} icon={<Terminal size={20} />}>
+                  {t('nav.terminal')}
+                </NavLink>
               </nav>
 
               <div className="p-4 border-t border-slate-700 text-xs text-slate-500">
@@ -94,5 +97,3 @@ function NavLink({
     </Link>
   );
 }
-
-

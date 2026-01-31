@@ -1,8 +1,27 @@
 llm:
-  vendor: "deepseek"
-  base_url: "https://api.deepseek.com"
-  api_key: "${DEEPSEEK_API_KEY}"
-  model: "deepseek-chat"
+  vendor: "deepseek" # or "openai", "azure", "ollama", etc. (any OpenAI-compatible API)
+  base_url: "https://api.deepseek.com" # API endpoint
+  api_key: "${DEEPSEEK_API_KEY}" # or ${OPENAI_API_KEY}, ${AZURE_API_KEY}, etc.
+  model: "deepseek-chat" # Model name
+
+  # Examples for other providers:
+  # OpenAI:
+  #   vendor: "openai"
+  #   base_url: "https://api.openai.com/v1"
+  #   api_key: "${OPENAI_API_KEY}"
+  #   model: "gpt-4"
+  #
+  # Azure OpenAI:
+  #   vendor: "azure"
+  #   base_url: "https://your-resource.openai.azure.com"
+  #   api_key: "${AZURE_API_KEY}"
+  #   model: "gpt-4"
+  #
+  # Ollama (local):
+  #   vendor: "ollama"
+  #   base_url: "http://localhost:11434/v1"
+  #   api_key: "dummy"  # Ollama doesn't require a key
+  #   model: "llama2"
 
 storage:
   data_path: "./data"
