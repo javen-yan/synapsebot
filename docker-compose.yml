@@ -1,11 +1,11 @@
 services:
   synapsebot-server:
-    image: ${SYNAPSEBOT_IMAGE:-synapsebot:local}
+    image: ${SYNAPSEBOT_IMAGE:-synapse-bot:v0.0.1}
     container_name: synapsebot-server
     environment:
       HOME: /home/synapsebot
       TERM: xterm-256color
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
       SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
       FEISHU_APP_ID: ${FEISHU_APP_ID:-}
@@ -28,7 +28,7 @@ services:
       start_period: 40s
 
   synapsebot-web:
-    image: ${SYNAPSEBOT_IMAGE:-synapsebot:local}
+    image: ${SYNAPSEBOT_IMAGE:-synapse-bot:v0.0.1}
     container_name: synapsebot-web
     environment:
       HOME: /home/synapsebot
@@ -47,12 +47,12 @@ services:
     command: ["npm", "start"]
 
   synapsebot-cli:
-    image: ${SYNAPSEBOT_IMAGE:-synapsebot:local}
+    image: ${SYNAPSEBOT_IMAGE:-synapse-bot:v0.0.1}
     container_name: synapsebot-cli
     environment:
       HOME: /home/synapsebot
       TERM: xterm-256color
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
     volumes:
       - ${SYNAPSEBOT_CONFIG_DIR:-./config.yaml}:/app/config.yaml:ro
       - ${SYNAPSEBOT_DATA_DIR:-./data}:/app/data

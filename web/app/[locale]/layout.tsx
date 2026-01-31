@@ -7,7 +7,7 @@ import { getMessages, getTranslations } from 'next-intl/server';
 
 const inter = Inter({ subsets: ["latin"] });
 
-export async function generateMetadata({params}: {params: {locale: string}}) {
+export async function generateMetadata({params}: {params: Promise<{locale: string}>}) {
   const {locale} = await params;
   const t = await getTranslations({locale, namespace: 'Layout'});
  
@@ -22,7 +22,7 @@ export default async function RootLayout({
   params
 }: Readonly<{
   children: React.ReactNode;
-  params: { locale: string };
+  params: Promise<{ locale: string }>;
 }>) {
   const { locale } = await params;
   const messages = await getMessages();
