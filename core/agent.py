@@ -10,12 +10,20 @@ from core.logger import logger
 from core.stage import AgentStage
 
 class Agent:
-    def __init__(self, llm: LLMClient, registry: ToolRegistry, system_prompt: str):
+    def __init__(self, llm: LLMClient, registry: ToolRegistry, system_prompt: str, user_memory: str = "", agent_id: str = "unknown", meta: Optional[dict] = None):
         self.llm = llm
         self.registry = registry
-        self.system_prompt = system_prompt
+        self.agent_id = agent_id
+        self.meta = meta
+        
+        # Include user memory in system prompt if available
+        full_system_prompt = system_prompt
+        if user_memory:
+            full_system_prompt += f"\n\n## User Memory\n{user_memory}\n"
+        
+        self.system_prompt = full_system_prompt
         self.messages: List[Dict[str, Any]] = [
-            {"role": "system", "content": system_prompt}
+            {"role": "system", "content": full_system_prompt}
         ]
 
     async def run(self, user_input: str, stage_callback: Optional[Callable[[AgentStage, str], Awaitable[None]]] = None):
@@ -27,7 +35,6 @@ class Agent:
         
         while True:
             # 1. Think
-            logger.debug("[dim]Thinking...[/dim]")
             if stage_callback:
                 await stage_callback(AgentStage.PROCESS, "Thinking...")
 
@@ -38,7 +45,9 @@ class Agent:
                 message = response.choices[0].message
             except Exception as e:
                 logger.error(f"LLM Error: {e}")
-                return "I encountered an error while thinking."
+                if stage_callback:
+                    await stage_callback(AgentStage.ERROR, f"LLM Error: {str(e)}")
+                return f"Error: {e}"
 
             self.messages.append(message)
 
@@ -58,6 +67,13 @@ class Agent:
                     
                     try:
                         arguments = json.loads(arguments_str)
+                        
+                        # Inject Context for tools that need it
+                        arguments["_context"] = {
+                            "agent_id": self.agent_id,
+                            "meta": self.meta
+                        }
+                        
                         tool = self.registry.get_tool(function_name)
                         
                         if tool:
@@ -67,6 +83,8 @@ class Agent:
                                 result = await tool.handler(arguments)
                             else:
                                 result = tool.handler(arguments)
+                                if asyncio.iscoroutine(result):
+                                    result = await result
                             
                             if isinstance(result, (list, tuple)):
                                  # Parse list of content
@@ -120,11 +138,7 @@ class Agent:
                     "content": output
                 })
             else:
-                # Top level response (Final Answer)
-                content = message.content
-                logger.print(f"\n[bold green]Agent:[/bold green]")
-                logger.print(Markdown(content))
-                return content
+                return message.content
 
     async def run_raw_stream(self, user_input: str, stage_callback: Optional[Callable[[AgentStage, str], Awaitable[None]]] = None):
         """Runs the agent and yields raw text chunks."""
@@ -136,7 +150,6 @@ class Agent:
         
         while True:
             # 1. Think
-            logger.debug("[dim]Thinking...[/dim]")
             if stage_callback:
                 await stage_callback(AgentStage.PROCESS, "Thinking...")
                 
@@ -147,9 +160,9 @@ class Agent:
                 message = response.choices[0].message
             except Exception as e:
                 logger.error(f"LLM Error in stream: {e}")
-                msg = f"Error: {str(e)}"
-                # Yield error as content
-                yield msg
+                if stage_callback:
+                    await stage_callback(AgentStage.ERROR, f"LLM Error: {str(e)}")
+                yield f"Error: {e}"
                 return
 
             self.messages.append(message)
@@ -166,14 +179,24 @@ class Agent:
                         
                     try:
                         arguments = json.loads(arguments_str)
+                                                
+                        # Inject Context for tools that need it
+                        arguments["_context"] = {
+                            "agent_id": self.agent_id,
+                            "meta": self.meta
+                        }
+ 
                         tool = self.registry.get_tool(function_name)
                         
                         if tool:
                             # Execute Tool
+                            # Check if handler is async
                             if asyncio.iscoroutinefunction(tool.handler):
                                 result = await tool.handler(arguments)
                             else:
                                 result = tool.handler(arguments)
+                                if asyncio.iscoroutine(result):
+                                    result = await result
                             
                             # Parse result
                             if isinstance(result, (list, tuple)):

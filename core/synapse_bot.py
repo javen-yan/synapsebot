@@ -66,6 +66,12 @@ class SynapseBot:
         logger.print("\n[bold]Initializing Agent Dispatcher...[/bold]")
         self.dispatcher = AgentDispatcher(self.config, self.registry, self.event_bus, self.skills)
 
+    async def start(self):
+        """Starts background services (Dispatcher, etc)."""
+        if self.dispatcher:
+            await self.dispatcher.start()
+        logger.print("[bold green]SynapseBot Services Started[/bold green]")
+
     async def reload_skills(self):
         """Reloads skills from disk."""
         skills_paths = [self.config.storage.system_skills_path, self.config.storage.user_skills_path]

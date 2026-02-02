@@ -7,6 +7,11 @@ from core.config import Config
 from core.tools import ToolRegistry
 from core.llm import LLMClient
 from core.logger import logger
+from core.memory import MemoryManager
+from core.cron.store import CronStore
+from core.cron.service import CronService
+from core.cron.tool import CronTool, CRON_TOOL_SCHEMA
+from core.cron.models import CronJob, PayloadType
 
 class AgentDispatcher:
     def __init__(self, config: Config, registry: ToolRegistry, event_bus: EventBus, skills: list):
@@ -16,14 +21,35 @@ class AgentDispatcher:
         self.skills = skills
         self.llm_client = LLMClient(config.llm)
         self.sessions: Dict[str, Agent] = {} # Key: "{source}:{chat_id}"
+        
+        # Initialize Memory Manager
+        self.memory_manager = MemoryManager(config.storage.get_memory_path)
+        
+        # Initialize Cron Service
+        self.cron_store = CronStore(config.storage)
+        self.cron_service = CronService(self.cron_store, event_bus)
+        
+        # Register Cron Tool
+        cron_tool = CronTool(self.cron_service)
+        self.registry.register(
+            name="cron",
+            description=cron_tool.__doc__ or "Manage cron jobs", # Use docstring or fallback
+            input_schema=CRON_TOOL_SCHEMA,
+            handler=cron_tool
+        )
 
-        # Subscribe to requests
+        # Subscribe to events
         self.event_bus.subscribe("agent:request", self.handle_request)
+        self.event_bus.subscribe("cron:trigger", self._handle_cron_trigger)
+
+    async def start(self):
+        """Starts the dispatcher and services."""
+        await self.cron_service.start()
 
     async def handle_request(self, request: BotRequest):
         try:
             session_key = f"{request.source}:{request.chat_id}"
-            agent = self.get_or_create_agent(session_key, request)
+            agent = await self.get_or_create_agent(session_key, request)
             
             # Send processing status (optional, if we want to support it via event bus)
             # await self.event_bus.publish(f"response:{request.source}", BotResponse(
@@ -35,7 +61,7 @@ class AgentDispatcher:
 
             async def stage_callback(stage: "AgentStage", status: str):
                  # Merge request meta with status meta
-                 response_meta = {**request.meta, "type": "status_update", "stage": stage.value}
+                 response_meta = {**request.meta, "type": "status", "stage": stage.value}
                  await self.event_bus.publish(f"response:{request.source}", BotResponse(
                     request_id=request.id,
                     target=request.source,
@@ -92,10 +118,28 @@ class AgentDispatcher:
                     meta=final_meta
                 )
                 await self.event_bus.publish(f"response:{request.source}", response)
+                
+                # Save interaction to memory if enabled (Async)
+                if self.config.storage.memory_enabled:
+                    await self.memory_manager.save_interaction(
+                        channel=request.source,
+                        user_id=request.chat_id,
+                        user_msg=request.content,
+                        agent_response=full_content
+                    )
 
             else:
                 # Standard Mode
                 response_content = await agent.run(input_text, stage_callback=stage_callback)
+                
+                # Save interaction to memory if enabled (Async)
+                if self.config.storage.memory_enabled:
+                    await self.memory_manager.save_interaction(
+                        channel=request.source,
+                        user_id=request.chat_id,
+                        user_msg=request.content,
+                        agent_response=response_content
+                    )
                 
                 # Publish Response with request meta
                 response = BotResponse(
@@ -119,12 +163,66 @@ class AgentDispatcher:
             )
             await self.event_bus.publish(f"response:{request.source}", error_response)
 
-    def get_or_create_agent(self, session_key: str, request: BotRequest) -> Agent:
+    async def get_or_create_agent(self, session_key: str, request: BotRequest) -> Agent:
         if session_key not in self.sessions:
+            # Load user memory if enabled
+            user_memory = ""
+            if self.config.storage.memory_enabled:
+                user_memory = await self.memory_manager.get_memory_summary(
+                    channel=request.source,
+                    user_id=request.chat_id,
+                    max_length=self.config.storage.memory_max_context
+                )
+            
             system_prompt = self._get_system_prompt(request)
-            self.sessions[session_key] = Agent(self.llm_client, self.registry, system_prompt)
-            logger.info(f"[Dispatcher] Created new session: {session_key}")
+            self.sessions[session_key] = Agent(
+                self.llm_client, 
+                self.registry, 
+                system_prompt,
+                user_memory=user_memory,
+                agent_id=session_key,
+                meta=request.meta
+            )
+            logger.debug(f"[Dispatcher] Created new session: {session_key}")
         return self.sessions[session_key]
+
+    async def _handle_cron_trigger(self, job: CronJob):
+        """Handles cron job triggers."""
+        logger.debug(f"[Dispatcher] Handling cron trigger for job {job.id}")
+        
+        try:
+            # Determine target session
+            agent_id = job.agentId or "system:global"
+            if ":" in agent_id:
+                source, chat_id = agent_id.split(":", 1)
+            else:
+                source, chat_id = "system", agent_id
+
+            content = ""
+            if job.payload.kind == PayloadType.SYSTEM_EVENT:
+                content = job.payload.text or "[System Event]"
+            elif job.payload.kind == PayloadType.AGENT_TURN:
+                content = job.payload.message or "[Agent Turn]"
+            
+            logger.debug(f"[Dispatcher] Triggering Request: {source}:{chat_id} -> {content}")
+
+            meta = job.meta or {}
+            meta["job_id"] = job.id
+            meta["trigger_type"] = "cron"
+
+            # Create Request
+            request = BotRequest(
+                source=source,
+                chat_id=chat_id,
+                content=content,
+                meta=meta
+            )
+            
+            # Publish as standard request
+            await self.event_bus.publish("agent:request", request)
+            
+        except Exception as e:
+            logger.error(f"[Dispatcher] Error handling cron trigger: {e}")
 
     def _get_system_prompt(self, request: BotRequest) -> str:
         # We can customize prompt based on source if needed
@@ -133,6 +231,11 @@ class AgentDispatcher:
         system_ctx = f"You are SynapseBot, a helpful AI assistant connected via {request.source}.\n"
         system_ctx += f"Current chat ID: {request.chat_id}\n"
         system_ctx += f"Your current working directory is: {cwd}\n"
+        
+        # Inject Agent ID for tools
+        agent_id = f"{request.source}:{request.chat_id}"
+        system_ctx += f"System Info:\nAgent ID: {agent_id}\nUse this Agent ID when creating cron jobs (for 'agentId' field if tool requires it).\n\n"
+        
         system_ctx += "Capabilities:\n"
         system_ctx += "- You can receive files and images sent by the user.\n"
         system_ctx += "- To send a file to the user, you MUST include a line in your response in this format: `[FILE: /absolute/path/to/file]`.\n"

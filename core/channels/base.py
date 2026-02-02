@@ -42,7 +42,7 @@ class BaseChannel(ABC):
         if response.target != self.workspace_name:
             return
         
-        logger.info(f"[{self.workspace_name}] Received response for {response.chat_id}")
+        logger.debug(f"[{self.workspace_name}] Received response for {response.chat_id}")
         await self.send(response)
 
     @abstractmethod

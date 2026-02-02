@@ -32,6 +32,7 @@ agent_app = SynapseBot()
 async def startup_event():
     logger.info("Starting SynapseBot API...")
     await agent_app.initialize()
+    await agent_app.start()
     
     # Initialize Slack Bot if enabled
     if agent_app.config.channels.slack.enabled:

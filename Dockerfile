@@ -54,9 +54,13 @@ COPY --from=frontend-builder /app/web/node_modules ./web/node_modules
 # Create data directories
 RUN mkdir -p /app/data/system/skills \
     /app/data/user/skills \
-    /app/data/uploads && \
+    /app/data/uploads \
+    /app/data/memory && \
     echo '{"mcpServers": {}}' > /app/data/system/mcp_config.json && \
     echo '{"mcpServers": {}}' > /app/data/user/mcp_config.json
+
+# Persist data
+VOLUME ["/app/data"]
 
 # Security hardening: Create non-root user
 RUN useradd -m -u 1000 synapsebot && \

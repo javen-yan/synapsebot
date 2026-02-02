@@ -14,6 +14,7 @@
 - 📡 **多渠道支持** - Web、Slack 和飞书集成
 - 💬 **实时通信** - 基于 WebSocket 的流式传输，即时响应
 - 📁 **文件处理** - 跨所有渠道上传和下载文件
+- ⏰ **定时任务** - 原生支持 Cron 作业、重复任务以及基于自然语言的延时提醒
 
 ### 技术特性
 
@@ -60,29 +61,25 @@ cd ..
 # 复制示例配置
 cp config.example.yaml config.yaml
 
-# 编辑 config.yaml 并添加你的 API Key
+# 编辑 config.yaml 并设置你的 LLM 配置
 # 系统支持任何兼容 OpenAI API 的服务
 
-# 示例 1：DeepSeek
+# 示例 1：使用配置文件
 # llm:
-#   vendor: "deepseek"
-#   base_url: "https://api.deepseek.com"
-#   api_key: "your-api-key-here"
-#   model: "deepseek-chat"
-
-# 示例 2：OpenAI
-# llm:
-#   vendor: "openai"
 #   base_url: "https://api.openai.com/v1"
-#   api_key: "your-api-key-here"
+#   api_key: "sk-your-api-key-here"
 #   model: "gpt-4"
 
-# 示例 3：Ollama（本地）
+# 示例 2：使用环境变量（推荐）
 # llm:
-#   vendor: "ollama"
-#   base_url: "http://localhost:11434/v1"
-#   api_key: "dummy"
-#   model: "llama2"
+#   base_url: "${LLM_BASE_URL}"
+#   api_key: "${LLM_API_KEY}"
+#   model: "${LLM_MODEL}"
+
+# 然后设置环境变量：
+export LLM_BASE_URL="https://api.openai.com/v1"
+export LLM_API_KEY="sk-your-api-key-here"
+export LLM_MODEL="gpt-4"
 ```
 
 ### 运行
@@ -184,13 +181,12 @@ synapsebot/
 
 ```yaml
 llm:
-  vendor: "deepseek" # 任何兼容 OpenAI 的提供商
-  base_url: "https://api.deepseek.com"
-  api_key: "${DEEPSEEK_API_KEY}" # 使用环境变量或直接值
-  model: "deepseek-chat"
+  base_url: "https://api.openai.com/v1" # 任何兼容 OpenAI 的 API
+  api_key: "${LLM_API_KEY}" # 使用环境变量（推荐）
+  model: "gpt-4" # 模型名称
 
 storage:
-  data_path: "./data" # 数据存储目录
+  data_path: "~/.synapsebot" # 数据存储目录
 
 channels:
   slack:
@@ -203,6 +199,16 @@ channels:
     app_secret: "${FEISHU_APP_SECRET}"
 
 log_level: "INFO" # 日志级别
+```
+
+**环境变量：**
+
+为 LLM 配置设置这些环境变量：
+
+```bash
+export LLM_BASE_URL="https://api.openai.com/v1"
+export LLM_API_KEY="sk-your-api-key-here"
+export LLM_MODEL="gpt-4"
 ```
 
 **支持的 LLM 提供商：**
@@ -290,6 +296,16 @@ curl -X POST http://localhost:8000/upload \
 # 下载文件
 curl http://localhost:8000/files/{filename}
 ```
+
+### 定时任务
+
+您可以使用自然语言要求 Agent 安排任务：
+
+- "10 分钟后提醒我休息"
+- "每小时检查一次服务器状态"
+- "每天上午 9 点发送每日报告"
+
+Agent 将使用内部的 Cron 服务自动管理这些任务。
 
 ## 🔌 渠道集成
 

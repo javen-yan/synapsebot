@@ -5,7 +5,11 @@ services:
     environment:
       HOME: /home/synapsebot
       TERM: xterm-256color
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      # LLM Configuration (unified environment variables)
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      # Channel Integrations
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
       SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
       FEISHU_APP_ID: ${FEISHU_APP_ID:-}
@@ -52,7 +56,10 @@ services:
     environment:
       HOME: /home/synapsebot
       TERM: xterm-256color
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      # LLM Configuration (unified environment variables)
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
     volumes:
       - ${SYNAPSEBOT_CONFIG_DIR:-./config.yaml}:/app/config.yaml:ro
       - ${SYNAPSEBOT_DATA_DIR:-./data}:/app/data

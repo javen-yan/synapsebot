@@ -1,30 +1,38 @@
 llm:
-  vendor: "deepseek" # or "openai", "azure", "ollama", etc. (any OpenAI-compatible API)
-  base_url: "https://api.deepseek.com" # API endpoint
-  api_key: "${DEEPSEEK_API_KEY}" # or ${OPENAI_API_KEY}, ${AZURE_API_KEY}, etc.
-  model: "deepseek-chat" # Model name
+  # All fields support environment variables in two ways:
+  # 1. Using ${ENV_VAR} syntax in config file: base_url: "${LLM_BASE_URL}"
+  # 2. Automatic fallback to LLM_* environment variables if not specified
 
-  # Examples for other providers:
+  base_url: "https://api.deepseek.com" # or use ${LLM_BASE_URL}
+  api_key: "${LLM_API_KEY}" # recommended to use environment variable
+  model: "deepseek-chat" # or use ${LLM_MODEL}
+
+  # Examples for different providers (all use the same LLM_* variables):
+  #
   # OpenAI:
-  #   vendor: "openai"
   #   base_url: "https://api.openai.com/v1"
-  #   api_key: "${OPENAI_API_KEY}"
+  #   api_key: "${LLM_API_KEY}"
   #   model: "gpt-4"
   #
   # Azure OpenAI:
-  #   vendor: "azure"
   #   base_url: "https://your-resource.openai.azure.com"
-  #   api_key: "${AZURE_API_KEY}"
+  #   api_key: "${LLM_API_KEY}"
   #   model: "gpt-4"
   #
   # Ollama (local):
-  #   vendor: "ollama"
   #   base_url: "http://localhost:11434/v1"
-  #   api_key: "dummy"  # Ollama doesn't require a key
+  #   api_key: "dummy"  # Ollama doesn't require a real key
   #   model: "llama2"
+  #
+  # Or simply set environment variables and leave this section minimal:
+  #   export LLM_BASE_URL="https://api.openai.com/v1"
+  #   export LLM_API_KEY="sk-your-api-key"
+  #   export LLM_MODEL="gpt-4"
 
 storage:
-  data_path: "./data"
+  data_path: "~/.synapsebot"
+  memory_enabled: true # Enable user memory system
+  memory_max_context: 2000 # Maximum characters of memory to load per session
 
 channels:
   slack:

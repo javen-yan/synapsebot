@@ -13,7 +13,9 @@ A lightweight, multi-channel AI agent framework with MCP (Model Context Protocol
 - 🎯 **Extensible Skills** - Load custom skills from system and user directories
 - 📡 **Multi-Channel Support** - Web, Slack, and Feishu (Lark) integrations
 - 💬 **Real-time Communication** - WebSocket-based streaming for instant responses
+- 🧠 **User Memory** - Persistent context tracking across sessions and channels
 - 📁 **File Handling** - Upload and download files across all channels
+- ⏰ **Scheduled Tasks** - Native support for cron jobs, recurring tasks, and delayed reminders using natural language
 
 ### Technical Features
 
@@ -22,6 +24,7 @@ A lightweight, multi-channel AI agent framework with MCP (Model Context Protocol
 - **Markdown Rendering** - Full GitHub Flavored Markdown with syntax highlighting
 - **Internationalization** - Multi-language support (English, Chinese)
 - **Terminal Integration** - Built-in web terminal with PTY support
+- **Memory System** - Persistent memory stored in Markdown format for easy inspection
 
 ## 🚀 Quick Start
 
@@ -60,29 +63,25 @@ cd ..
 # Copy example config
 cp config.example.yaml config.yaml
 
-# Edit config.yaml and add your API key
+# Edit config.yaml and set your LLM configuration
 # The system supports any OpenAI-compatible API
 
-# Example 1: DeepSeek
+# Example 1: Using config file
 # llm:
-#   vendor: "deepseek"
-#   base_url: "https://api.deepseek.com"
-#   api_key: "your-api-key-here"
-#   model: "deepseek-chat"
-
-# Example 2: OpenAI
-# llm:
-#   vendor: "openai"
 #   base_url: "https://api.openai.com/v1"
-#   api_key: "your-api-key-here"
+#   api_key: "sk-your-api-key-here"
 #   model: "gpt-4"
 
-# Example 3: Ollama (local)
+# Example 2: Using environment variables (recommended)
 # llm:
-#   vendor: "ollama"
-#   base_url: "http://localhost:11434/v1"
-#   api_key: "dummy"
-#   model: "llama2"
+#   base_url: "${LLM_BASE_URL}"
+#   api_key: "${LLM_API_KEY}"
+#   model: "${LLM_MODEL}"
+
+# Then set environment variables:
+export LLM_BASE_URL="https://api.openai.com/v1"
+export LLM_API_KEY="sk-your-api-key-here"
+export LLM_MODEL="gpt-4"
 ```
 
 ### Running
@@ -184,13 +183,14 @@ synapsebot/
 
 ```yaml
 llm:
-  vendor: "deepseek" # Any OpenAI-compatible provider
-  base_url: "https://api.deepseek.com"
-  api_key: "${DEEPSEEK_API_KEY}" # Use env var or direct value
-  model: "deepseek-chat"
+  base_url: "https://api.openai.com/v1" # Any OpenAI-compatible API
+  api_key: "${LLM_API_KEY}" # Use env var (recommended)
+  model: "gpt-4" # Model name
 
 storage:
-  data_path: "./data" # Data storage directory
+  data_path: "~/.synapsebot" # Data storage directory
+  memory_enabled: true # Enable user memory system
+  memory_max_context: 2000 # Max characters to load from memory
 
 channels:
   slack:
@@ -203,6 +203,16 @@ channels:
     app_secret: "${FEISHU_APP_SECRET}"
 
 log_level: "INFO" # Logging level
+```
+
+**Environment Variables:**
+
+Set these environment variables for LLM configuration:
+
+```bash
+export LLM_BASE_URL="https://api.openai.com/v1"
+export LLM_API_KEY="sk-your-api-key-here"
+export LLM_MODEL="gpt-4"
 ```
 
 **Supported LLM Providers:**
@@ -290,6 +300,16 @@ curl -X POST http://localhost:8000/upload \
 # Download file
 curl http://localhost:8000/files/{filename}
 ```
+
+### Scheduled Tasks
+
+You can ask the agent to schedule tasks using natural language:
+
+- "Remind me to take a break in 10 minutes"
+- "Check the server status every hour"
+- "Send the daily report at 9 AM every day"
+
+The agent will automatically manage these tasks using the internal Cron Service.
 
 ## 🔌 Channel Integrations
 

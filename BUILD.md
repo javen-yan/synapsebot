@@ -196,7 +196,9 @@ Docker Compose uses volumes to persist data:
 
 - `synapsebot-home`: User home directory
 - `./config.yaml`: Configuration file (read-only)
-- `./data`: Data directory (skills, uploads, MCP config)
+- `./data`: Data directory (skills, uploads, MCP config) - for Docker volumes
+
+**Note:** The default data directory for non-Docker deployments is `~/.synapsebot`.
 
 ## Production Deployment
 
@@ -345,17 +347,17 @@ sudo certbot --nginx -d your-domain.com
 
 ### Optional Variables
 
-| Variable                | Description         | Default         |
-| ----------------------- | ------------------- | --------------- |
-| `SLACK_BOT_TOKEN`       | Slack bot token     | -               |
-| `SLACK_APP_TOKEN`       | Slack app token     | -               |
-| `FEISHU_APP_ID`         | Feishu app ID       | -               |
-| `FEISHU_APP_SECRET`     | Feishu app secret   | -               |
-| `SYNAPSEBOT_API_PORT`   | API server port     | `8000`          |
-| `SYNAPSEBOT_WEB_PORT`   | Web frontend port   | `3000`          |
-| `SYNAPSEBOT_CONFIG_DIR` | Config file path    | `./config.yaml` |
-| `SYNAPSEBOT_DATA_DIR`   | Data directory path | `./data`        |
-| `LOG_LEVEL`             | Logging level       | `INFO`          |
+| Variable                | Description         | Default                                     |
+| ----------------------- | ------------------- | ------------------------------------------- |
+| `SLACK_BOT_TOKEN`       | Slack bot token     | -                                           |
+| `SLACK_APP_TOKEN`       | Slack app token     | -                                           |
+| `FEISHU_APP_ID`         | Feishu app ID       | -                                           |
+| `FEISHU_APP_SECRET`     | Feishu app secret   | -                                           |
+| `SYNAPSEBOT_API_PORT`   | API server port     | `8000`                                      |
+| `SYNAPSEBOT_WEB_PORT`   | Web frontend port   | `3000`                                      |
+| `SYNAPSEBOT_CONFIG_DIR` | Config file path    | `./config.yaml`                             |
+| `SYNAPSEBOT_DATA_DIR`   | Data directory path | `./data` (Docker) / `~/.synapsebot` (local) |
+| `LOG_LEVEL`             | Logging level       | `INFO`                                      |
 
 ### Setting Environment Variables
 

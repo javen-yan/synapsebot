@@ -1,52 +1,70 @@
 import os
 import yaml
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 class LLMConfig(BaseModel):
-    base_url: str
-    api_key: str
-    model: str
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+    
+    @field_validator('base_url', 'api_key', 'model', mode='after')
+    @classmethod
+    def validate_required_fields(cls, v, info):
+        """Ensure required fields are not empty after environment variable expansion"""
+        if not v:
+            raise ValueError(f"LLM configuration field '{info.field_name}' is required but not provided")
+        return v
 
 class StorageConfig(BaseModel):
-    data_path: str = "./data"
+    data_path: str = "~/.synapsebot"
+    memory_enabled: bool = True
+    memory_max_context: int = 2000
     
     @property
     def system_skills_path(self) -> str:
-        return os.path.join(self.data_path, "system", "skills")
+        """System skills path (read-only, from core/system/skills)"""
+        return os.path.join(os.path.dirname(os.path.dirname(__file__)), "core", "system", "skills")
     
     @property
     def system_mcp_config_path(self) -> str:
-        return os.path.join(self.data_path, "system", "mcp_config.json")
+        """System MCP config path (read-only, from core/system/mcp_config.json)"""
+        return os.path.join(os.path.dirname(os.path.dirname(__file__)), "core", "system", "mcp_config.json")
     
     @property
     def user_skills_path(self) -> str:
-        return os.path.join(self.data_path, "user", "skills")
+        """User skills path (writable, in user data directory)"""
+        return os.path.join(os.path.expanduser(self.data_path), "user", "skills")
     
     @property
     def user_mcp_config_path(self) -> str:
-        return os.path.join(self.data_path, "user", "mcp_config.json")
+        """User MCP config path (writable, in user data directory)"""
+        return os.path.join(os.path.expanduser(self.data_path), "user", "mcp_config.json")
+
+    @property
+    def get_memory_path(self) -> str:
+        return os.path.join(os.path.expanduser(self.data_path), "memory")
 
     @property
     def upload_dir(self) -> str:
-        return os.path.join(self.data_path, "uploads")
+        return os.path.join(os.path.expanduser(self.data_path), "uploads")
 
     def ensure_structure(self):
-        """Ensure all required directories and files exist."""
-        # Create directories
-        for path in [self.system_skills_path, self.user_skills_path, self.upload_dir]:
-            os.makedirs(path, exist_ok=True)
-            
-        # Create MCP config files if they don't exist
-        default_mcp_config = '{"mcpServers": {}}'
+        """Ensure all required user directories and files exist."""
+        # Expand ~ in data_path
+        data_path = os.path.expanduser(self.data_path)
+        self.data_path = data_path
         
-        for path in [self.system_mcp_config_path, self.user_mcp_config_path]:
-            # Ensure parent dir exists
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            
-            if not os.path.exists(path):
-                with open(path, "w") as f:
-                    f.write(default_mcp_config)
+        # Create user directories only (system resources are in core/system)
+        for path in [self.user_skills_path, self.upload_dir, self.get_memory_path]:
+            os.makedirs(path, exist_ok=True)
+        
+        # Create user MCP config if it doesn't exist
+        default_mcp_config = '{"mcpServers": {}}'
+        if not os.path.exists(self.user_mcp_config_path):
+            os.makedirs(os.path.dirname(self.user_mcp_config_path), exist_ok=True)
+            with open(self.user_mcp_config_path, "w") as f:
+                f.write(default_mcp_config)
     
 
 
@@ -90,6 +108,40 @@ def get_config(config_path: str = "config.yaml", reload: bool = False) -> "Confi
         
     return _config_instance
 
+def expand_env_var(value: Optional[str], fallback_env_vars: list[str] = None) -> Optional[str]:
+    """
+    Expand environment variable in a config value.
+    
+    Supports two formats:
+    1. ${ENV_VAR} syntax in the value string
+    2. Direct environment variable fallback if value is None/empty
+    
+    Args:
+        value: The config value (may contain ${ENV_VAR} or be None)
+        fallback_env_vars: List of environment variable names to try as fallback
+        
+    Returns:
+        Expanded value or None if not found
+    """
+    # If value contains ${ENV_VAR}, expand it
+    if value and isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+        env_var = value[2:-1]
+        return os.getenv(env_var)
+    
+    # If value is provided and not an env var reference, return as-is
+    if value:
+        return value
+    
+    # Try fallback environment variables
+    if fallback_env_vars:
+        for env_var in fallback_env_vars:
+            env_value = os.getenv(env_var)
+            if env_value:
+                return env_value
+    
+    return None
+
+
 def load_config(config_path: str = "config.yaml") -> Config:
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
@@ -97,29 +149,43 @@ def load_config(config_path: str = "config.yaml") -> Config:
     with open(config_path, "r") as f:
         raw_config = yaml.safe_load(f)
     
-    # Expand env vars in API Key
-    api_key = raw_config.get("llm", {}).get("api_key", "")
-    if api_key.startswith("${") and api_key.endswith("}"):
-        env_var = api_key[2:-1]
-        raw_config["llm"]["api_key"] = os.getenv(env_var, "")
+    # Expand LLM configuration with environment variable support
+    llm_config = raw_config.get("llm", {})
+    
+    # Support both config file and environment variables for LLM settings
+    # Priority: config file value > environment variable
+    llm_config["base_url"] = expand_env_var(
+        llm_config.get("base_url"),
+        fallback_env_vars=["LLM_BASE_URL"]
+    )
+    
+    llm_config["api_key"] = expand_env_var(
+        llm_config.get("api_key"),
+        fallback_env_vars=["LLM_API_KEY"]
+    )
+    
+    llm_config["model"] = expand_env_var(
+        llm_config.get("model"),
+        fallback_env_vars=["LLM_MODEL"]
+    )
+    
+    raw_config["llm"] = llm_config
 
     # Expand Slack env vars
     slack_cfg = raw_config.get("channels", {}).get("slack", {})
-    if slack_cfg: 
+    if slack_cfg:
         for field in ["bot_token", "app_token"]:
-            val = slack_cfg.get(field, "")
-            if val and val.startswith("${") and val.endswith("}"):
-                env_var = val[2:-1]
-                raw_config.setdefault("channels", {}).setdefault("slack", {})[field] = os.getenv(env_var, "")
+            expanded = expand_env_var(slack_cfg.get(field))
+            if expanded:
+                raw_config.setdefault("channels", {}).setdefault("slack", {})[field] = expanded
 
     # Expand Feishu env vars
     feishu_cfg = raw_config.get("channels", {}).get("feishu", {})
     if feishu_cfg:
         for field in ["app_id", "app_secret"]:
-            val = feishu_cfg.get(field, "")
-            if val and val.startswith("${") and val.endswith("}"):
-                env_var = val[2:-1]
-                raw_config.setdefault("channels", {}).setdefault("feishu", {})[field] = os.getenv(env_var, "")
+            expanded = expand_env_var(feishu_cfg.get(field))
+            if expanded:
+                raw_config.setdefault("channels", {}).setdefault("feishu", {})[field] = expanded
         
     config = Config(**raw_config)
     

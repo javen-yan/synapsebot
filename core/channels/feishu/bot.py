@@ -99,7 +99,7 @@ class FeishuBot(BaseChannel):
                 logger.warning(f"[Feishu] Received unsupported message type: {msg_type}")
                 return
 
-            logger.info(f"[Feishu] Msg from {chat_id}: {text}")
+            logger.debug(f"[Feishu] Msg from {chat_id}: {text}")
             
             # Run Async Logic
             try:
@@ -155,7 +155,7 @@ class FeishuBot(BaseChannel):
             # Check if this is a status update, chunk, or final response
             msg_type = response.meta.get("type", "response")
             
-            if msg_type == "status_update":
+            if msg_type == "status":
                 # We can't really "stream" updates exclusively to the same bubble easily without
                 # keeping track of a "response bubble ID".
                 # For simplicity, let's just log it or maybe send ephemeral "thinking" if we haven't.

@@ -30,9 +30,15 @@ class WebBot(BaseChannel):
     async def websocket_chat(self, websocket: WebSocket):
         await websocket.accept()
         
-        # Generate new chat_id per connection
-        chat_id = str(uuid.uuid4())
-        logger.info(f"[Web-WS] New connection: {chat_id}")
+        # Generate session ID for WebSocket connection management
+        session_id = str(uuid.uuid4())
+        
+        # Get client IP for memory tracking
+        client_ip = websocket.client.host if websocket.client else "unknown"
+        # Sanitize IP for filename (replace : with - for IPv6)
+        user_id = client_ip.replace(":", "-")
+        
+        logger.debug(f"[Web-WS] New connection: session={session_id}, ip={client_ip}")
         
         async def send_callback(message: str):
             try:
@@ -41,8 +47,8 @@ class WebBot(BaseChannel):
                 logger.error(f"[Web-WS] Error sending to {chat_id}: {e}")
 
         try:
-            # Register connection
-            await self.register_connection(chat_id, send_callback)
+            # Register connection with session_id
+            await self.register_connection(session_id, send_callback)
             
             # Send welcome message
             await websocket.send_text(json.dumps({"type": "status", "content": "Connected to SynapseBot"}))
@@ -58,33 +64,34 @@ class WebBot(BaseChannel):
                     files = []
                 
                 if text or files:
-                    await self.handle_message(chat_id, text, files)
+                    await self.handle_message(user_id, session_id, text, files)
                 
         except WebSocketDisconnect:
-            logger.info(f"[Web-WS] Disconnected: {chat_id}")
+            logger.debug(f"[Web-WS] Disconnected: session={session_id}, ip={client_ip}")
         except Exception as e:
-            logger.error(f"[Web-WS] Error in connection {chat_id}: {e}")
+            logger.error(f"[Web-WS] Error in connection session={session_id}: {e}")
         finally:
-            await self.unregister_connection(chat_id)
+            await self.unregister_connection(session_id)
 
     async def register_connection(self, chat_id: str, send_callback: Callable[[str], Awaitable[None]]):
         """Registers a new WebSocket connection."""
         self.connections[chat_id] = send_callback
-        logger.info(f"[Web] Connection registered for {chat_id}")
+        logger.debug(f"[Web] Connection registered for {chat_id}")
 
     async def unregister_connection(self, chat_id: str):
         """Unregisters a WebSocket connection."""
         if chat_id in self.connections:
             del self.connections[chat_id]
-            logger.info(f"[Web] Connection unregistered for {chat_id}")
+            logger.debug(f"[Web] Connection unregistered for {chat_id}")
 
-    async def handle_message(self, chat_id: str, text: str, files: List = None):
+    async def handle_message(self, user_id: str, session_id: str, text: str, files: List = None):
         """
         Handles an incoming message from WebSocket.
         Publishes a BotRequest to the EventBus.
         
         Args:
-            chat_id: Chat session ID
+            user_id: User identifier (IP address) for memory tracking
+            session_id: WebSocket session ID for response routing
             text: Message text
             files: List of file objects with structure:
                    [{"name": "file.pdf", "url": "/files/xxx", "size": 1024, "type": "application/pdf"}]
@@ -116,10 +123,11 @@ class WebBot(BaseChannel):
 
         request = BotRequest(
             source=self.workspace_name,
-            chat_id=chat_id,
+            chat_id=user_id,  # Use IP-based user_id for memory
             content=text,
             stream=True, # Enable streaming
-            files=files_meta
+            files=files_meta,
+            meta={"session_id": session_id}  # Store session for response routing
         )
 
         await self.publish_request(request)
@@ -128,11 +136,18 @@ class WebBot(BaseChannel):
         """
         Receives response from EventBus and sends it via the registered callback.
         """
-        chat_id = response.chat_id
-        callback = self.connections.get(chat_id)
+        # Get session_id from metadata for routing
+        session_id = response.meta.get("session_id")
+        user_id = response.chat_id  # This is the IP
+        
+        if not session_id:
+            logger.warning(f"[Web] Missing session_id in response for {user_id}. Cannot route to WebSocket.")
+            return
+
+        callback = self.connections.get(session_id)
         
         if not callback:
-            logger.warning(f"[Web] No active connection for {chat_id}. Dropping response.")
+            logger.warning(f"[Web] No active connection for session {session_id} (user {user_id}). Dropping response.")
             return
 
         try:
@@ -140,7 +155,7 @@ class WebBot(BaseChannel):
             msg_type = response.meta.get("type", "response")
             content = response.content
 
-            if msg_type == "status_update":
+            if msg_type == "status":
                 stage = response.meta.get("stage", "process")
                 payload = json.dumps({"type": "status", "content": content, "stage": stage})
             elif msg_type == "chunk":

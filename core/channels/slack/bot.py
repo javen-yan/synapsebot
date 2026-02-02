@@ -52,6 +52,7 @@ class SlackBot(BaseChannel):
 
     async def process_message(self, event, say):
         channel_id = event["channel"]
+        user_id = event["user"]
         user_input = event.get("text", "")
         ts = event.get("ts")
         
@@ -73,7 +74,7 @@ class SlackBot(BaseChannel):
         if not user_input and not files:
             return
 
-        logger.info(f"[Slack] Msg from {channel_id}: {user_input}")
+        logger.debug(f"[Slack] Msg from {channel_id}: {user_input}")
         
         # Create Request
         request = BotRequest(
@@ -81,7 +82,7 @@ class SlackBot(BaseChannel):
             chat_id=channel_id,
             content=user_input,
             files=files_meta,
-            meta={"ts": ts} # Store timestamp to reply in thread if needed
+            meta={"ts": ts, "user": user_id} # Store timestamp to reply in thread if needed
         )
         
         await self.publish_request(request)
@@ -100,7 +101,7 @@ class SlackBot(BaseChannel):
              # Check for status update
             msg_type = response.meta.get("type", "response")
             
-            if msg_type == "status_update":
+            if msg_type == "status":
                 # Maybe post ephemeral? Or update a "thinking" message?
                 # Hard to track "thinking" message ID without state.
                 # Just ignore for now or log
