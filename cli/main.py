@@ -83,4 +83,4 @@ async def start_cli():
         logger.error(f"[red]Error:[/red] {e}")
     finally:
         output_task.cancel()
-        logger.print("[bold]Goodbye![/bold]")
+        await agent_app.stop()

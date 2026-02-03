@@ -9,12 +9,14 @@ from core.llm import LLMClient
 from core.logger import logger
 from core.plugins.cron.plugin import CronPlugin
 from core.plugins.memory.plugin import MemoryPlugin
+from core.plugins.browser.plugin import BrowserPlugin
 from core.plugins.cron.models import CronJob, PayloadType
 
 # Default Plugins List
 DEFAULT_PLUGINS = [
     CronPlugin,
-    MemoryPlugin
+    MemoryPlugin,
+    BrowserPlugin
 ]
 
 class AgentDispatcher:
@@ -49,6 +51,14 @@ class AgentDispatcher:
         # Subscribe to events
         self.event_bus.subscribe("agent:request", self.handle_request)
         self.event_bus.subscribe("cron:trigger", self._handle_cron_trigger)
+
+    async def stop(self):
+        """Stops all plugins and services."""
+        for plugin in self.plugins:
+            try:
+                await plugin.close()
+            except Exception as e:
+                logger.error(f"[Dispatcher] Error closing plugin {plugin.name}: {e}")
 
 
     async def handle_request(self, request: BotRequest):

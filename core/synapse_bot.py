@@ -4,11 +4,9 @@ import asyncio
 from typing import Optional
 from core.logger import logger
 from core.config import get_config
-from core.skills import load_skills, format_skills_for_prompt
+from core.skills import load_skills
 from core.tools import ToolRegistry
 from core.mcp_client import MCPManager
-from core.llm import LLMClient
-from core.agent import Agent
 from core.eventbus import EventBus
 from core.dispatcher import AgentDispatcher
 
@@ -58,18 +56,31 @@ class SynapseBot:
         self.skills = load_skills(skills_paths)
         logger.print(f"[green]Local Skills loaded[/green]: {len(self.skills)}")
         
-        # 4. List Tools
-        tools = self.registry.list_tools()
-        logger.print(f"[green]Total Tools Registered[/green]: {len(tools)}")
-
-        # 5. Initialize Dispatcher
+        # 4. Initialize Dispatcher
         self.dispatcher = AgentDispatcher(self.config, self.registry, self.event_bus, self.skills)
 
     async def start(self):
         """Starts background services (Dispatcher, etc)."""
         if self.dispatcher:
             await self.dispatcher.start()
+        
+        # 5. List Tools
+        tools = self.registry.list_tools()
+        logger.print(f"[green]Total Tools Registered[/green]: {len(tools)}")
         logger.print("[bold green]SynapseBot Services Started[/bold green]")
+
+    async def stop(self):
+        """Stops the application and cleans up resources."""
+        logger.print("[bold yellow]SynapseBot Stopping...[/bold yellow]")
+        if self.dispatcher:
+            await self.dispatcher.stop()
+            
+        await self.mcp_manager.stop_all_servers()
+        
+        # Close LLM Client if it has close method (depends on implementation)
+        # if self.llm_client: ...
+        
+        logger.print("[bold green]Goodbye![/bold green]")
 
     async def reload_skills(self):
         """Reloads skills from disk."""

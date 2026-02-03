@@ -29,11 +29,7 @@ class MemoryPlugin(Plugin):
             if req_id not in self._buffers:
                 self._buffers[req_id] = []
             self._buffers[req_id].append(response.content)
-            return
-
-        is_done = response.meta.get("done", False)
-        # If it's a final response (done=True) or just a standard response
-        # We should save it.
+            return 
         
         # If we have buffered chunks, use them if content is empty?
         # Dispatcher sends full content in done event, but user requested we merge chunks.
@@ -86,3 +82,6 @@ class MemoryPlugin(Plugin):
                 handler=self.tool
             )
         ]
+
+    async def close(self):
+        pass

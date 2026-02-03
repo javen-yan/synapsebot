@@ -60,6 +60,10 @@ async def startup_event():
         # Initialize Web Bot Router
         app.include_router(web_bot.router)
         
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("Shutting down SynapseBot API...")
+    await agent_app.stop()
 
 @app.get("/health")
 async def health_check():

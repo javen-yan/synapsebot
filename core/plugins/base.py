@@ -25,3 +25,8 @@ class Plugin(ABC):
     async def context_prompt(self, request: Any = None) -> str:
         """Return a system prompt snippet to inject into the agent's context."""
         return ""
+        
+    @abstractmethod
+    async def close(self):
+        """Close the plugin (async)."""
+        pass

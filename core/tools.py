@@ -14,7 +14,7 @@ class Tool(BaseModel):
     description: str
     input_schema: Dict[str, Any]
     handler: Callable[[Dict[str, Any]], Awaitable[Any]]
-    source: str = "local"
+    source: str = "system"
 
 class ToolRegistry:
     def __init__(self):

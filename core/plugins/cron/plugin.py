@@ -35,3 +35,7 @@ class CronPlugin(Plugin):
                 handler=self.tool
             )
         ]
+
+    async def close(self):
+        if self.service:
+            self.service.stop()
