@@ -10,13 +10,15 @@ from core.logger import logger
 from core.plugins.cron.plugin import CronPlugin
 from core.plugins.memory.plugin import MemoryPlugin
 from core.plugins.browser.plugin import BrowserPlugin
+from core.plugins.planner.plugin import PlannerPlugin
 from core.plugins.cron.models import CronJob, PayloadType
 
 # Default Plugins List
 DEFAULT_PLUGINS = [
     CronPlugin,
     MemoryPlugin,
-    BrowserPlugin
+    BrowserPlugin,
+    PlannerPlugin
 ]
 
 class AgentDispatcher:

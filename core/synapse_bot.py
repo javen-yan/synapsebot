@@ -39,6 +39,7 @@ class SynapseBot:
             if level_str != "DEBUG":
                 logging.getLogger("mcp").setLevel(logging.WARNING)
                 logging.getLogger("httpx").setLevel(logging.WARNING)
+                logging.getLogger("httpcore").setLevel(logging.WARNING)
         except Exception as e:
             logger.error(f"[red]Error loading config:[/red] {e}")
             raise
