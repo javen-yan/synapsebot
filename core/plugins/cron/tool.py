@@ -1,8 +1,8 @@
 from typing import Dict, Any, Optional
 import json
 import time
-from core.cron.service import CronService
-from core.cron.models import CronJobCreate, CronJobPatch, ScheduleType, PayloadType
+from core.plugins.cron.service import CronService
+from core.plugins.cron.models import CronJobCreate, CronJobPatch, ScheduleType, PayloadType
 
 CRON_TOOL_SCHEMA = {
     "type": "object",

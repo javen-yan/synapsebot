@@ -63,7 +63,6 @@ class SynapseBot:
         logger.print(f"[green]Total Tools Registered[/green]: {len(tools)}")
 
         # 5. Initialize Dispatcher
-        logger.print("\n[bold]Initializing Agent Dispatcher...[/bold]")
         self.dispatcher = AgentDispatcher(self.config, self.registry, self.event_bus, self.skills)
 
     async def start(self):

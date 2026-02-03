@@ -5,7 +5,7 @@ import logging
 import aiofiles
 from typing import List
 from core.config import StorageConfig
-from core.cron.models import CronJob, CronStoreFile
+from core.plugins.cron.models import CronJob, CronStoreFile
 
 logger = logging.getLogger(__name__)
 

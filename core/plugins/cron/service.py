@@ -11,11 +11,11 @@ from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 
 from core.eventbus import EventBus
-from core.cron.models import (
+from core.plugins.cron.models import (
     CronJob, CronJobCreate, CronJobPatch, 
     ScheduleType
 )
-from core.cron.store import CronStore
+from core.plugins.cron.store import CronStore
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +32,27 @@ class CronService:
         if self._initialized:
             return
 
-        logger.info("[CronService] Starting...")
+        logger.debug("[CronService] Starting...")
         self.scheduler.start()
         
         # Load jobs from store
         self._jobs_cache = await self.store.load()
-        logger.info(f"[CronService] Loaded {len(self._jobs_cache)} jobs from store")
+        logger.debug(f"[CronService] Loaded {len(self._jobs_cache)} jobs from store")
         
-        # Schedule jobs
+        # Cleanup expired AT jobs
+        now_ms = int(time.time() * 1000)
+        jobs_to_remove = []
+        for job in self._jobs_cache:
+            if job.schedule.kind == ScheduleType.AT and job.schedule.atMs and job.schedule.atMs < now_ms:
+                # remove expired AT jobs
+                jobs_to_remove.append(job.id)
+        
+        if jobs_to_remove:
+            logger.debug(f"[CronService] Removing {len(jobs_to_remove)} expired jobs during startup")
+            for job_id in jobs_to_remove:
+                await self.remove_job(job_id)
+
+        # Schedule remaining jobs
         for job in self._jobs_cache:
             if job.enabled:
                 self._schedule_job(job)
@@ -189,7 +202,9 @@ class CronService:
 
         # Handle one-shot cleanup
         # Only save if we modify the job (e.g., enable=False)
-        if job.deleteAfterRun or (job.schedule.kind == ScheduleType.AT):
-            # For 'at' jobs, disable after run
-            if job.schedule.kind == ScheduleType.AT:
-                await self.update_job(job.id, CronJobPatch(enabled=False))
+        # Handle cleanup
+        if job.deleteAfterRun:
+             await self.remove_job(job.id)
+        elif job.schedule.kind == ScheduleType.AT:
+             # Default behavior for AT jobs: Disable after run
+            await self.update_job(job.id, CronJobPatch(enabled=False))

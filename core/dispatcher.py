@@ -7,11 +7,15 @@ from core.config import Config
 from core.tools import ToolRegistry
 from core.llm import LLMClient
 from core.logger import logger
-from core.memory import MemoryManager
-from core.cron.store import CronStore
-from core.cron.service import CronService
-from core.cron.tool import CronTool, CRON_TOOL_SCHEMA
-from core.cron.models import CronJob, PayloadType
+from core.plugins.cron.plugin import CronPlugin
+from core.plugins.memory.plugin import MemoryPlugin
+from core.plugins.cron.models import CronJob, PayloadType
+
+# Default Plugins List
+DEFAULT_PLUGINS = [
+    CronPlugin,
+    MemoryPlugin
+]
 
 class AgentDispatcher:
     def __init__(self, config: Config, registry: ToolRegistry, event_bus: EventBus, skills: list):
@@ -22,29 +26,30 @@ class AgentDispatcher:
         self.llm_client = LLMClient(config.llm)
         self.sessions: Dict[str, Agent] = {} # Key: "{source}:{chat_id}"
         
-        # Initialize Memory Manager
-        self.memory_manager = MemoryManager(config.storage.get_memory_path)
+        self.plugins_cls = skills if skills else []
         
-        # Initialize Cron Service
-        self.cron_store = CronStore(config.storage)
-        self.cron_service = CronService(self.cron_store, event_bus)
+        self.plugins = []
+        for cls in DEFAULT_PLUGINS:
+             self.plugins.append(cls(self))
         
-        # Register Cron Tool
-        cron_tool = CronTool(self.cron_service)
-        self.registry.register(
-            name="cron",
-            description=cron_tool.__doc__ or "Manage cron jobs", # Use docstring or fallback
-            input_schema=CRON_TOOL_SCHEMA,
-            handler=cron_tool
-        )
+    async def start(self):
+        """Starts the dispatcher and services."""
+        for plugin in self.plugins:
+            await plugin.initialize()
+            # Register tools
+            for tool in plugin.get_tools():
+                self.registry.register(
+                    name=tool.name,
+                    description=tool.description,
+                    input_schema=tool.input_schema,
+                    handler=tool.handler
+                )
+            logger.debug(f"Plugin {plugin.name} initialized.")
 
         # Subscribe to events
         self.event_bus.subscribe("agent:request", self.handle_request)
         self.event_bus.subscribe("cron:trigger", self._handle_cron_trigger)
 
-    async def start(self):
-        """Starts the dispatcher and services."""
-        await self.cron_service.start()
 
     async def handle_request(self, request: BotRequest):
         try:
@@ -109,7 +114,7 @@ class AgentDispatcher:
                 # Actually, clients might need to know when it's done. 
                 # Existing `response` type serves that purpose.
                 # Final response with merged meta
-                final_meta = {**request.meta, "type": "response", "done": True}
+                final_meta = {**request.meta, "type": "response", "done": True, "user_msg": request.content}
                 response = BotResponse(
                     request_id=request.id,
                     target=request.source,
@@ -118,38 +123,25 @@ class AgentDispatcher:
                     meta=final_meta
                 )
                 await self.event_bus.publish(f"response:{request.source}", response)
+                await self.event_bus.publish("agent:response", response)
                 
-                # Save interaction to memory if enabled (Async)
-                if self.config.storage.memory_enabled:
-                    await self.memory_manager.save_interaction(
-                        channel=request.source,
-                        user_id=request.chat_id,
-                        user_msg=request.content,
-                        agent_response=full_content
-                    )
 
             else:
                 # Standard Mode
                 response_content = await agent.run(input_text, stage_callback=stage_callback)
-                
-                # Save interaction to memory if enabled (Async)
-                if self.config.storage.memory_enabled:
-                    await self.memory_manager.save_interaction(
-                        channel=request.source,
-                        user_id=request.chat_id,
-                        user_msg=request.content,
-                        agent_response=response_content
-                    )
-                
+
                 # Publish Response with request meta
+                # Add user_msg for plugins
+                response_meta = {**request.meta, "user_msg": request.content}
                 response = BotResponse(
                     request_id=request.id,
                     target=request.source,
                     chat_id=request.chat_id,
                     content=response_content,
-                    meta=request.meta  # Preserve request meta (e.g., message_id for Feishu)
+                    meta=response_meta  # Preserve request meta (e.g., message_id for Feishu)
                 )
                 await self.event_bus.publish(f"response:{request.source}", response)
+                await self.event_bus.publish("agent:response", response)
 
         except Exception as e:
             logger.error(f"[Dispatcher] Error handling request {request.id}: {e}")
@@ -166,20 +158,14 @@ class AgentDispatcher:
     async def get_or_create_agent(self, session_key: str, request: BotRequest) -> Agent:
         if session_key not in self.sessions:
             # Load user memory if enabled
-            user_memory = ""
-            if self.config.storage.memory_enabled:
-                user_memory = await self.memory_manager.get_memory_summary(
-                    channel=request.source,
-                    user_id=request.chat_id,
-                    max_length=self.config.storage.memory_max_context
-                )
+            # MOVED TO PLUGIN HOOK (context_prompt)
             
-            system_prompt = self._get_system_prompt(request)
+            system_prompt = await self._get_system_prompt(request)
             self.sessions[session_key] = Agent(
                 self.llm_client, 
                 self.registry, 
                 system_prompt,
-                user_memory=user_memory,
+                user_memory="",
                 agent_id=session_key,
                 meta=request.meta
             )
@@ -224,7 +210,7 @@ class AgentDispatcher:
         except Exception as e:
             logger.error(f"[Dispatcher] Error handling cron trigger: {e}")
 
-    def _get_system_prompt(self, request: BotRequest) -> str:
+    async def _get_system_prompt(self, request: BotRequest) -> str:
         # We can customize prompt based on source if needed
         import os
         cwd = os.getcwd()
@@ -244,4 +230,13 @@ class AgentDispatcher:
         from core.skills import format_skills_for_prompt
         system_ctx += format_skills_for_prompt(self.skills) + "\n\n"
         
+        # Inject Plugin Contexts
+        for plugin in self.plugins:
+            try:
+                plugin_ctx = await plugin.context_prompt(request)
+                if plugin_ctx:
+                    system_ctx += f"{plugin_ctx}\n"
+            except Exception as e:
+                logger.error(f"[Dispatcher] Error getting context from plugin {plugin.name}: {e}")
+
         return system_ctx
